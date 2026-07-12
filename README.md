@@ -23,6 +23,7 @@ L'application intègre une interface graphique complète permettant de personnal
 * **Gestion des polices :** Support complet des polices universelles (Arial, Verdana, etc.) et intégration automatique et sécurisée de la police moderne *Comic Neue* (via Google Fonts) pour un affichage parfait des accents français sur ordinateurs et smartphones.
 * **Moteur de recherche local :** Une barre de recherche prédictive instantanée est intégrée sur l'accueil et sur chaque fiche.
 * **Statistiques privées :** Un tableau de bord administrateur sécurisé (`stats.php`) permet de suivre le nombre de visites mensuelles, de distinguer les humains des robots de recherche, et de télécharger ou vider l'historique.
+* **Lien de partage :** Un discret lien de crédit est inclus dans le pied de page de votre site (`Généré via l'application GénéaSite`), renvoyant vers le site officiel du projet pour permettre à d'autres passionnés de découvrir et d'utiliser ce script gratuit.
 
 ---
 
@@ -30,7 +31,7 @@ L'application intègre une interface graphique complète permettant de personnal
 
 1. Prérequis
 Vous devez disposer de Python 3 installé sur votre machine et de la bibliothèque de lecture GEDCOM. Pour l'installer, ouvrez un terminal et tapez :
-```bash
+
 pip install python-gedcom
 
 
