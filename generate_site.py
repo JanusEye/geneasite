@@ -318,7 +318,7 @@ def generer_page_individu(individu, gedcom_parser, output_dir, config):
             <p>Données rassemblées par {config['auteur']}</p>
             {html_contact_block}
             <p style="margin-top: 15px; font-size: 0.85em; color: #999;">
-                Généré via l'application <a href="http://genealogie.finot.free.fr" target="_blank">GénéaSit</a><br>
+                Généré via l'application <a href="http://geneasite.free.fr" target="_blank">GénéaSite</a><br>
                 <a href="../mentions.html" style="color: #999; text-decoration: underline;">Mentions légales & Confidentialité</a>
             </p>
         </footer>
@@ -542,7 +542,7 @@ def execution_generation(config):
         </ul>
         <footer style="margin-top: 50px; font-size: 0.9em; color: #666; border-top: 1px solid #eee; padding-top: 15px;">
             <p style="margin-top: 5px; font-size: 0.85em; color: #999;">
-                Généré via l'application <a href="http://genealogie.finot.free.fr" target="_blank">GénéaSit</a><br>
+                Généré via l'application <a href="http://geneasite.free.fr" target="_blank">GénéaSite</a><br>
                 <a href="mentions.html" style="color: #999; text-decoration: underline;">Mentions légales & Confidentialité</a>
             </p>
         </footer>
@@ -745,7 +745,7 @@ foreach ($visites_inverses as $v) {
             <p>Données rassemblées par {config['auteur']}</p>
             {html_contact_block}
             <p style="margin-top: 15px; font-size: 0.85em; color: #999; line-height: 1.5;">
-                Généré via l'application <a href="http://genealogie.finot.free.fr" target="_blank">GénéaSit</a><br>
+                Généré via l'application <a href="http://geneasite.free.fr" target="_blank">GénéaSite</a><br>
                 <a href="mentions.html" style="color: #999; text-decoration: underline;">Mentions légales & Confidentialité</a>
             </p>
         </footer>
