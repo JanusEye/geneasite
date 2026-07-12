@@ -13,6 +13,7 @@ La confidentialité de vos données familiales est notre priorité absolue :
 * **Aucun fichier GEDCOM sur le serveur :** Votre fichier `.ged` reste exclusivement sur votre ordinateur. Le script le lit localement, extrait les données, puis génère uniquement des pages PHP anonymisées. Le fichier source n'est jamais transféré sur internet.
 * **Protection des personnes vivantes :** Le script détecte automatiquement les personnes de moins de 100 ans sans date de décès. Leurs fiches sont automatiquement verrouillées, affichant la mention `[CONFIDENTIEL]` pour la date/lieu de naissance et masquant leur nom de famille.
 * **Anonymisation des Visiteurs (RGPD) :** Le compteur de visites intégré masque le dernier octet des adresses IP des visiteurs (ex: `192.168.1.0`), garantissant une totale conformité avec les règles de la CNIL et du RGPD.
+* **Lien de partage :** Un discret lien de crédit est inclus dans le pied de page de votre site (`Généré via l'application GénéaSite`), renvoyant vers le site officiel du projet pour permettre à d'autres passionnés de découvrir et d'utiliser ce script gratuit.
 
 ---
 
