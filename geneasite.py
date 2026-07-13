@@ -334,6 +334,70 @@ def generer_page_individu(individu, gedcom_parser, output_dir, config):
     with open(filepath, "w", encoding="utf-8") as f:
         f.write(html_content)
 
+def generer_page_mentions(output_dir, config):
+    """Génère automatiquement le fichier mentions.php avec le système de tracking officiel et un texte de base"""
+    
+    # Corps HTML de la page des mentions
+    html_body = f"""<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mentions légales & Confidentialité - {config['titre_principal']}</title>
+    <style>
+        body {{ font-family: '{config['police']}', Arial, sans-serif; background-color: {config['c_fond']}; color: #333; line-height: 1.6; padding: 20px; }}
+        .container {{ max-width: 800px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
+        h1 {{ color: {config['c_titres']}; border-bottom: 2px solid {config['c_titres']}; padding-bottom: 10px; }}
+        h2 {{ color: {config['c_titres']}; margin-top: 20px; }}
+        .alert {{ background-color: #fff3cd; border: 1px solid #ffeeba; color: #856404; padding: 15px; border-radius: 4px; margin-bottom: 20px; font-style: italic; }}
+        footer {{ margin-top: 40px; text-align: center; font-size: 0.85em; color: #999; border-top: 1px solid #eee; padding-top: 15px; }}
+        a {{ color: {config['c_liens']}; text-decoration: none; }}
+        a:hover {{ text-decoration: underline; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+    
+        <a href="index.php" class="retour">← Retour au site</a>
+        
+        <h1>Mentions Légales & Confidentialité</h1>
+        
+        <div class="alert">
+            <strong>✏️ Note à l'attention de l'administrateur :</strong> Pensez à compléter cette page avec vos informations personnelles (nom, hébergeur Free Pages Perso, etc.) en modifiant directement le fichier <code>mentions.php</code>.
+        </div>
+
+        <h2>1. Éditeur du site</h2>
+        <p>Ce site généalogique est édité à des fins purement personnelles et familiales par :<br>
+        <strong>Nom de l'auteur :</strong> {config['auteur']}<br>
+        <strong>Contact :</strong> {config['contact']}</p>
+
+        <h2>2. Hébergement</h2>
+        <p>Ce site est hébergé gracieusement sur les Pages Personnelles de Free.<br>
+        SAS Free - 8 rue de la Ville l'Évêque, 75008 Paris, France.</p>
+
+        <h2>3. Vie privée & RGPD</h2>
+        <p>Conformément aux directives du RGPD et de la CNIL :</p>
+        <ul>
+            <li>Les personnes vivantes (de moins de 100 ans) sont automatiquement anonymisées (leurs données sensibles portent la mention <i>[CONFIDENTIEL]</i>).</li>
+            <li>Si vous apparaissez sur ce site et souhaitez exercer votre droit de retrait ou de modification, merci de contacter l'auteur via l'adresse ci-dessus.</li>
+            <li><strong>Statistiques :</strong> Les adresses IP des visiteurs collectées à des fins statistiques sont immédiatement anonymisées (le dernier octet est tronqué à 0), empêchant toute identification des personnes.</li>
+        </ul>
+
+        <footer>
+            <p>Généré via l'application <a href="http://geneasite.free.fr" target="_blank">GénéaSite</a></p>
+        </footer>
+    </div>
+</body>
+</html>
+"""
+    
+    # On assemble le code de tracking officiel de l'application avec le code HTML
+    html_complet = PHP_TRACKING_HEADER + "\n" + html_body
+    
+    # Écriture du fichier à la racine du site généré
+    with open(os.path.join(output_dir, "mentions.php"), "w", encoding="utf-8") as f:
+        f.write(html_complet)
+
 def execution_generation(config):
     chemin_ged = config["ged_path"]
     output_dir = "./site_web"
@@ -759,9 +823,10 @@ foreach ($visites_inverses as $v) {
 """
     with open(os.path.join(output_dir, "index.php"), "w", encoding="utf-8") as f:
         f.write(html_accueil)
+        
+    generer_page_mentions(output_dir, config)
             
     messagebox.showinfo("Succès", f"✨ Le site en PHP a été généré avec succès.")
-
 
 class ApplicationConfiguration:
     def __init__(self, root):
