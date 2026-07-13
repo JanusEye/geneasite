@@ -620,49 +620,97 @@ def execution_generation(config):
         with open(os.path.join(output_dir, f"patronymes-{lettre}.php"), "w", encoding="utf-8") as f:
             f.write(html_lettre)
 
-    # PAGE STATS.PHP
-    html_page_stats = """<?php
+    # PAGE STATS.PHP AVEC LE SYSTÈME DE VÉRIFICATION PAR MOT DE PASSE SÉCURISÉ
+    html_page_stats = f"""<?php
+if (!isset($_SESSION)) {{ session_start(); }}
+define('STATS_PASSWORD', '{config.get("stats_password", "admin123")}');
+
+if (isset($_GET['action']) && $_GET['action'] == 'logout') {{
+    unset($_SESSION['stats_logged_in']);
+    header('Location: stats.php');
+    exit;
+}}
+
+if (isset($_POST['password'])) {{
+    if ($_POST['password'] === STATS_PASSWORD) {{
+        $_SESSION['stats_logged_in'] = true;
+    }} else {{
+        $erreur = 'Mot de passe incorrect !';
+    }}
+}}
+
+if (!isset($_SESSION['stats_logged_in']) || $_SESSION['stats_logged_in'] !== true) {{
+    ?><!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zone Protégée</title>
+    <link rel="stylesheet" href="assets/style.css?v=4">
+</head>
+<body>
+    <main class="container" style="max-width: 500px; margin: 60px auto;">
+        <h2>🔒 Zone Protégée</h2>
+        <p>L'accès aux statistiques de visites est restreint.</p>
+        <?php if (isset($erreur)): ?>
+            <div style="background: #f8d7da; color: #721c24; padding: 10px; border-radius: 6px; margin-bottom:15px; font-weight:bold;">
+                <?php echo $erreur; ?>
+            </div>
+        <?php endif; ?>
+        <form method="post" action="stats.php">
+            <input type="password" name="password" placeholder="Entrez le mot de passe" required 
+                   style="width: 80%; padding: 12px; font-size: 1.05em; border: 2px solid #ddd; border-radius: 6px; text-align: center; margin-bottom: 20px;">
+            <br>
+            <button type="submit" class="btn-action btn-dl" style="border:none; padding: 10px 20px; font-size:1em;">Valider et Ouvrir</button>
+        </form>
+        <p style="margin-top:20px;"><a href="index.php">← Retour à l'accueil</a></p>
+    </main>
+</body>
+</html><?php
+    exit;
+}}
+
 $fichier_stats = rtrim($_SERVER['DOCUMENT_ROOT'], '/') . '/stats.json';
 
-if (isset($_GET['action']) && $_GET['action'] == 'download') {
-    if (file_exists($fichier_stats)) {
+if (isset($_GET['action']) && $_GET['action'] == 'download') {{
+    if (file_exists($fichier_stats)) {{
         header('Content-Type: application/json');
         header('Content-Disposition: attachment; filename="stats.json"');
         readfile($fichier_stats);
         exit;
-    }
-}
+    }}
+}}
 
-if (isset($_POST['action']) && $_POST['action'] == 'clear') {
+if (isset($_POST['action']) && $_POST['action'] == 'clear') {{
     file_put_contents($fichier_stats, json_encode([]));
     header('Location: stats.php?msg=deleted');
     exit;
-}
+}}
 
-if (file_exists($fichier_stats)) {
+if (file_exists($fichier_stats)) {{
     $donnees_brutes = file_get_contents($fichier_stats);
     $visites = json_decode($donnees_brutes, true);
-} else {
+}} else {{
     $visites = [];
-}
-if (!is_array($visites)) { $visites = []; }
+}}
+if (!is_array($visites)) {{ $visites = []; }}
 
 $visites_inverses = array_reverse($visites);
 $dernieres_50_visites = array_slice($visites_inverses, 0, 50);
 
 $stats_par_mois = [];
-foreach ($visites_inverses as $v) {
+foreach ($visites_inverses as $v) {{
     $m = isset($v['mois']) ? $v['mois'] : substr($v['date'], 0, 7);
-    if (!isset($stats_par_mois[$m])) {
+    if (!isset($stats_par_mois[$m])) {{
         $stats_par_mois[$m] = array("total" => 0, "utilisateurs" => 0, "robots" => 0);
-    }
+    }}
     $stats_par_mois[$m]['total']++;
-    if (isset($v['robot']) && $v['robot'] === "Robot/Scan") {
+    if (isset($v['robot']) && $v['robot'] === "Robot/Scan") {{
         $stats_par_mois[$m]['robots']++;
-    } else {
+    }} else {{
         $stats_par_mois[$m]['utilisateurs']++;
-    }
-}
+    }}
+}}
 ?><!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -678,6 +726,7 @@ foreach ($visites_inverses as $v) {
         <div style="margin-bottom: 20px;">
             <a href="index.php" style="margin-right:20px;">← Retourner à l'accueil</a>
             <a href="stats.php?action=download" class="btn-action btn-dl">💾 Télécharger stats.json</a>
+            <a href="stats.php?action=logout" class="btn-action btn-del" style="background-color: #7f8c8d;">🔒 Déconnexion</a>
             
             <form action="stats.php" method="post" style="display: inline;" onsubmit="return confirm('⚠️ Êtes-vous sûr de vouloir supprimer définitivement tout l\'historique des statistiques ?');">
                 <input type="hidden" name="action" value="clear">
@@ -832,7 +881,7 @@ class ApplicationConfiguration:
     def __init__(self, root):
         self.root = root
         self.root.title("GénéaSit - Configuration PHP (Free)")
-        self.root.geometry("690x850")
+        self.root.geometry("690x900")
         self.root.configure(padx=15, pady=15)
 
         self.color_fond = "#f4f6f9"
@@ -878,6 +927,12 @@ class ApplicationConfiguration:
         self.entry_contact = tk.Entry(root, width=70)
         self.entry_contact.insert(0, "Mon adresse mail")
         self.entry_contact.pack(fill="x", pady=(0, 12))
+
+        # AJOUT DU CHAMP MOT DE PASSE STATISTIQUES POUR SÉCURISER ACCÈS À STATS.PHP
+        tk.Label(root, text="Mot de passe d'accès aux Statistiques (stats.php) :", font=("Arial", 10, "bold")).pack(anchor="w")
+        self.entry_stats_pass = tk.Entry(root, width=70, show="*")
+        self.entry_stats_pass.insert(0, "admin123")
+        self.entry_stats_pass.pack(fill="x", pady=(0, 12))
 
         tk.Label(root, text="Police de caractères générale du site :", font=("Arial", 10, "bold")).pack(anchor="w")
         self.var_police = tk.StringVar(value="Segoe UI")
@@ -936,6 +991,7 @@ class ApplicationConfiguration:
             "titre_principal": self.entry_titre.get().strip() or "Ma généalogie",
             "auteur": self.entry_auteur.get().strip() or "Auteur",
             "contact": self.entry_contact.get().strip(),
+            "stats_password": self.entry_stats_pass.get().strip() or "admin123",
             "police": self.var_police.get(),
             "c_fond": self.color_fond,
             "c_titres": self.color_titres,
