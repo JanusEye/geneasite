@@ -319,7 +319,7 @@ def generer_page_individu(individu, gedcom_parser, output_dir, config):
             {html_contact_block}
             <p style="margin-top: 15px; font-size: 0.85em; color: #999;">
                 Généré via l'application <a href="http://geneasite.free.fr" target="_blank">GénéaSite</a><br>
-                <a href="../mentions.html" style="color: #999; text-decoration: underline;">Mentions légales & Confidentialité</a>
+                <a href="../mentions.php" style="color: #999; text-decoration: underline;">Mentions légales & Confidentialité</a>
             </p>
         </footer>
         <p style="margin-top: 20px;"><a href="../index.php">← Retour à l'accueil principal</a></p>
@@ -543,7 +543,7 @@ def execution_generation(config):
         <footer style="margin-top: 50px; font-size: 0.9em; color: #666; border-top: 1px solid #eee; padding-top: 15px;">
             <p style="margin-top: 5px; font-size: 0.85em; color: #999;">
                 Généré via l'application <a href="http://geneasite.free.fr" target="_blank">GénéaSite</a><br>
-                <a href="mentions.html" style="color: #999; text-decoration: underline;">Mentions légales & Confidentialité</a>
+                <a href="mentions.php" style="color: #999; text-decoration: underline;">Mentions légales & Confidentialité</a>
             </p>
         </footer>
         <p style="margin-top:30px;"><a href="index.php">← Retour à l'accueil</a></p>
@@ -746,7 +746,7 @@ foreach ($visites_inverses as $v) {
             {html_contact_block}
             <p style="margin-top: 15px; font-size: 0.85em; color: #999; line-height: 1.5;">
                 Généré via l'application <a href="http://geneasite.free.fr" target="_blank">GénéaSite</a><br>
-                <a href="mentions.html" style="color: #999; text-decoration: underline;">Mentions légales & Confidentialité</a>
+                <a href="mentions.php" style="color: #999; text-decoration: underline;">Mentions légales & Confidentialité</a>
             </p>
         </footer>
     </main>
