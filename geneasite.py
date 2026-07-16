@@ -1004,7 +1004,7 @@ ErrorDocument 404 /404.php
 class ApplicationConfiguration:
     def __init__(self, root):
         self.root = root
-        self.root.title("GénéaSit - Configuration PHP (Free)")
+        self.root.title("GénéaSite - Configuration PHP (Free)")
         self.root.geometry("690x900")
         self.root.configure(padx=15, pady=15)
 
