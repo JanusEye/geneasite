@@ -245,20 +245,9 @@ def generer_page_individu(individu, gedcom_parser, output_dir, config):
     filename = generer_nom_fichier_php(individu)
     filepath = os.path.join(output_dir, "individus", filename)
 
-    js_email_protection = ""
     html_contact_block = ""
     if config["contact"]:
-        email_inverse = config["contact"][::-1]
-        html_contact_block = '<p id="email-box"></p>'
-        js_email_protection = f"""
-        <script>
-            document.addEventListener("DOMContentLoaded", function() {{
-                var em = "{email_inverse}".split("").reverse().join("");
-                var box = document.getElementById("email-box");
-                if(box) box.innerHTML = '📧 Contact : <a href="mailto:' + em + '">' + em + '</a>';
-            }});
-        </script>
-        """
+        html_contact_block = '<p>📧 <a href="../contact.php">Contacter l\'auteur</a></p>'
 
     html_content = PHP_TRACKING_HEADER + f"""<!DOCTYPE html>
 <html lang="fr">
@@ -318,7 +307,7 @@ def generer_page_individu(individu, gedcom_parser, output_dir, config):
             <p>Données rassemblées par {config['auteur']}</p>
             {html_contact_block}
             <p style="margin-top: 15px; font-size: 0.85em; color: #999;">
-                Généré via l'application <a href="http://geneasite.free.fr" target="_blank">GénéaSite</a><br>
+                Généré via l'application <a href="http://geneasite.free.fr" target="_blank">GénéaSite, du GEDCOM au site web</a><br>
                 <a href="../mentions.php" style="color: #999; text-decoration: underline;">Mentions légales & Confidentialité</a>
             </p>
         </footer>
@@ -327,7 +316,6 @@ def generer_page_individu(individu, gedcom_parser, output_dir, config):
 
     <script src="../assets/donnees_recherche.js"></script>
     <script src="../assets/search.js"></script>
-    {js_email_protection}
 </body>
 </html>
 """
@@ -336,8 +324,6 @@ def generer_page_individu(individu, gedcom_parser, output_dir, config):
 
 def generer_page_mentions(output_dir, config):
     """Génère automatiquement le fichier mentions.php avec le système de tracking officiel et un texte de base"""
-    
-    # Corps HTML de la page des mentions
     html_body = f"""<!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -390,12 +376,101 @@ def generer_page_mentions(output_dir, config):
 </body>
 </html>
 """
-    
-    # On assemble le code de tracking officiel de l'application avec le code HTML
     html_complet = PHP_TRACKING_HEADER + "\n" + html_body
-    
-    # Écriture du fichier à la racine du site généré
     with open(os.path.join(output_dir, "mentions.php"), "w", encoding="utf-8") as f:
+        f.write(html_complet)
+
+def generer_page_merci(output_dir, config):
+    """Génère la page merci.php affichée après l'envoi d'un message"""
+    html_body = f"""<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Merci - {config['titre_principal']}</title>
+    <link rel="stylesheet" href="assets/style.css?v=4">
+</head>
+<body>
+    <div class="container" style="max-width: 600px; margin: 60px auto; padding: 40px 20px;">
+        <h1 style="color: {config['c_titres']};">✉️ Message envoyé !</h1>
+        <p style="color: #555; line-height: 1.6; margin: 20px 0; font-size: 1.1em;">
+            Votre message a bien été transmis. L'auteur de l'arbre généalogique vous répondra dans les plus brefs délais.
+        </p>
+        <p style="margin-top: 30px;"><a href="index.php" class="btn-action btn-dl" style="background-color: {config['c_titres']}; color: white; padding: 10px 20px;">← Retourner à l'accueil</a></p>
+    </div>
+</body>
+</html>
+"""
+    html_complet = PHP_TRACKING_HEADER + "\n" + html_body
+    with open(os.path.join(output_dir, "merci.php"), "w", encoding="utf-8") as f:
+        f.write(html_complet)
+
+def generer_page_contact(output_dir, config):
+    """Génère la page contact.php contenant le formulaire dynamique FormSubmit universel"""
+    html_body = f"""<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contact - {config['titre_principal']}</title>
+    <link rel="stylesheet" href="assets/style.css?v=4">
+    <style>
+        .form-group {{ margin-bottom: 15px; text-align: left; }}
+        label {{ display: block; margin-bottom: 5px; font-weight: bold; color: #333; }}
+        input[type="text"], input[type="email"], textarea {{ width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; font-family: inherit; font-size: 1em; }}
+        textarea {{ resize: vertical; min-height: 120px; }}
+        .btn-submit {{ background-color: {config['c_liens']}; color: white; border: none; padding: 12px 20px; font-size: 1em; font-weight: bold; border-radius: 4px; cursor: pointer; display: block; width: 100%; transition: background 0.2s; }}
+        .btn-submit:hover {{ filter: brightness(0.9); }}
+        .aide-form {{ font-size: 0.85em; color: #7f8c8d; margin-top: 15px; text-align: left; line-height: 1.4; border-top: 1px dashed #ddd; padding-top: 10px; }}
+    </style>
+</head>
+<body>
+    <div class="container" style="max-width: 600px; margin: 40px auto;">
+        <a href="index.php" style="display: inline-block; margin-bottom: 15px; text-align: left;">← Retour au site</a>
+        
+        <h1 style="color: {config['c_titres']};">✉️ Contacter l'auteur</h1>
+        <p style="color: #666; margin-bottom: 25px;">Utilisez le formulaire ci-dessous pour envoyer un message concernant les recherches de cet arbre.</p>
+
+        <?php
+        // Calcul intelligent de l'URL de redirection pour gérér dynamiquement les dossiers (ex: /site_web/)
+        $protocol = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http');
+        $host = $_SERVER['HTTP_HOST'];
+        $directory = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\\\');
+        $next_url = $protocol . '://' . $host . $directory . '/merci.php';
+        ?>
+
+        <form action="https://formsubmit.co/{config['contact']}" method="POST">
+            <input type="text" name="_honey" style="display:none">
+            
+            <input type="hidden" name="_next" value="<?php echo $next_url; ?>">
+
+            <div class="form-group">
+                <label for="name">Votre nom / pseudo :</label>
+                <input type="text" id="name" name="nom" placeholder="Ex: Jean Dupont" required>
+            </div>
+
+            <div class="form-group">
+                <label for="email">Votre adresse e-mail :</label>
+                <input type="email" id="email" name="email" placeholder="Ex: jean.dupont@email.com" required>
+            </div>
+
+            <div class="form-group">
+                <label for="message">Votre message :</label>
+                <textarea id="message" name="message" placeholder="Votre question ou remarque généalogique..." required></textarea>
+            </div>
+
+            <button type="submit" class="btn-submit">🚀 Envoyer le message</button>
+        </form>
+
+        <div class="aide-form">
+            ℹ️ <strong>Note pour le propriétaire du site :</strong> Lors du tout premier envoi de message, vous recevrez un e-mail de confirmation de la part de FormSubmit pour valider et lier définitivement votre formulaire à votre messagerie sans configuration supplémentaire.
+        </div>
+    </div>
+</body>
+</html>
+"""
+    html_complet = PHP_TRACKING_HEADER + "\n" + html_body
+    with open(os.path.join(output_dir, "contact.php"), "w", encoding="utf-8") as f:
         f.write(html_complet)
 
 def execution_generation(config):
@@ -407,9 +482,7 @@ def execution_generation(config):
     font_declaration = ""
     police_choisie = config['police']
     
-    # RESOLUTION DU PROBLEME DES ACCENTS INCOMPATIBLES
     if police_choisie == "Comic Sans MS":
-        # On importe proprement la version Google Font complète (latin) qui contient tous les accents français natifs
         font_declaration = """@import url('https://fonts.googleapis.com/css2?family=Comic+Neue:ital,wght@0,300;0,400;0,700;1,400&display=swap');\n"""
         police_alternative = "'Comic Neue', 'Comic Sans MS', cursive, sans-serif"
     else:
@@ -606,7 +679,7 @@ def execution_generation(config):
         </ul>
         <footer style="margin-top: 50px; font-size: 0.9em; color: #666; border-top: 1px solid #eee; padding-top: 15px;">
             <p style="margin-top: 5px; font-size: 0.85em; color: #999;">
-                Généré via l'application <a href="http://geneasite.free.fr" target="_blank">GénéaSite</a><br>
+                Généré via l'application <a href="http://geneasite.free.fr" target="_blank">GénéaSite, du GEDCOM au site web</a><br>
                 <a href="mentions.php" style="color: #999; text-decoration: underline;">Mentions légales & Confidentialité</a>
             </p>
         </footer>
@@ -809,20 +882,9 @@ foreach ($visites_inverses as $v) {{
     with open(os.path.join(output_dir, "stats.php"), "w", encoding="utf-8") as f:
         f.write(html_page_stats)
 
-    js_email_protection = ""
     html_contact_block = ""
     if config["contact"]:
-        email_inverse = config["contact"][::-1]
-        html_contact_block = '<p id="email-box"></p>'
-        js_email_protection = f"""
-        <script>
-            document.addEventListener("DOMContentLoaded", function() {{
-                var em = "{email_inverse}".split("").reverse().join("");
-                var box = document.getElementById("email-box");
-                if(box) box.innerHTML = '📧 Contact : <a href="mailto:' + em + '">' + em + '</a>';
-            }});
-        </script>
-        """
+        html_contact_block = '<p>📧 <a href="contact.php">Contacter l\'auteur</a></p>'
 
     html_accueil = PHP_TRACKING_HEADER + f"""<!DOCTYPE html>
 <html lang="fr">
@@ -858,7 +920,7 @@ foreach ($visites_inverses as $v) {{
             <p>Données rassemblées par {config['auteur']}</p>
             {html_contact_block}
             <p style="margin-top: 15px; font-size: 0.85em; color: #999; line-height: 1.5;">
-                Généré via l'application <a href="http://geneasite.free.fr" target="_blank">GénéaSite</a><br>
+                Généré via l'application <a href="http://geneasite.free.fr" target="_blank">GénéaSite, du GEDCOM au site web</a><br>
                 <a href="mentions.php" style="color: #999; text-decoration: underline;">Mentions légales & Confidentialité</a>
             </p>
         </footer>
@@ -866,7 +928,6 @@ foreach ($visites_inverses as $v) {{
 
     <script src="assets/donnees_recherche.js"></script>
     <script src="assets/search.js"></script>
-    {js_email_protection}
 </body>
 </html>
 """
@@ -874,6 +935,69 @@ foreach ($visites_inverses as $v) {{
         f.write(html_accueil)
         
     generer_page_mentions(output_dir, config)
+    
+    # Génération des nouvelles pages de contact et de merci
+    generer_page_contact(output_dir, config)
+    generer_page_merci(output_dir, config)
+    
+# AJOUT DU .HTACCESS ET DE LA PAGE 404.PHP 
+    
+# Création du fichier .htaccess à la racine du site web généré.
+
+    code_htaccess = """# 1. Activation de PHP 5.6 sur les serveurs Pages Perso de Free.fr
+<IfDefine Free>
+php56 1 
+</IfDefine>
+
+# 2. Empêche la navigation par index (Sécurisation des répertoires /individus et /assets)
+Options -Indexes
+
+# 3. Redirection 404 personnalisée vers notre fichier PHP d'erreur
+ErrorDocument 404 /404.php
+"""
+    with open(os.path.join(output_dir, ".htaccess"), "w", encoding="utf-8", newline="\n") as f:
+        f.write(code_htaccess)
+
+# Création de la page d'erreur 404 universelle qui s'adapte au dossier courant
+    html_404 = PHP_TRACKING_HEADER + f"""<?php
+    // Détermination dynamique de l'emplacement du site
+    $root_path = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\\\');
+    if ($root_path === '/' || $root_path === '\\\\') {{
+        $root_path = '';
+    }}
+    ?><!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Page introuvable - 404</title>
+    <link rel="stylesheet" href="<?php echo $root_path; ?>/assets/style.css?v=4">
+</head>
+<body>
+    <main class="container" style="max-width: 600px; margin: 60px auto; padding: 40px 20px;">
+        <h1 style="font-size: 4em; margin: 0; color: #e74c3c;">🕵️‍♂️ 404</h1>
+        <h2 style="margin-top: 10px;">Page introuvable ou inexistante</h2>
+        <p style="color: #666; line-height: 1.6; margin: 20px 0;">
+            L'ancêtre ou le fichier que vous recherchez n'existe pas ou l'adresse du site a changé. 
+            Nous vous invitons à utiliser la barre de recherche ci-dessous pour le retrouver.
+        </p>
+        
+        <div class="encadre" style="border-top-color: #e74c3c; background: #fffaf9; padding: 15px; text-align: left;">
+            <div class="search-container">
+                <input type="text" id="input-recherche" placeholder="🔍 Rechercher une personne..." oninput="filtrerRecherche(this.value, '<?php echo $root_path; ?>/')" onkeydown="gererEntreeRecherche(event)">
+                <div id="resultats-recherche" class="search-results"></div>
+            </div>
+        </div>
+        
+        <p style="margin-top: 30px;"><a href="<?php echo $root_path; ?>/index.php" class="btn-action btn-dl" style="background-color: {config['c_titres']}; color: white; padding: 10px 20px;">← Retourner à l'accueil principal</a></p>
+    </main>
+    <script src="<?php echo $root_path; ?>/assets/donnees_recherche.js"></script>
+    <script src="<?php echo $root_path; ?>/assets/search.js"></script>
+</body>
+</html>
+"""
+    with open(os.path.join(output_dir, "404.php"), "w", encoding="utf-8") as f:
+        f.write(html_404)
             
     messagebox.showinfo("Succès", f"✨ Le site en PHP a été généré avec succès.")
 
@@ -928,7 +1052,6 @@ class ApplicationConfiguration:
         self.entry_contact.insert(0, "Mon adresse mail")
         self.entry_contact.pack(fill="x", pady=(0, 12))
 
-        # AJOUT DU CHAMP MOT DE PASSE STATISTIQUES POUR SÉCURISER ACCÈS À STATS.PHP
         tk.Label(root, text="Mot de passe d'accès aux Statistiques (stats.php) :", font=("Arial", 10, "bold")).pack(anchor="w")
         self.entry_stats_pass = tk.Entry(root, width=70, show="*")
         self.entry_stats_pass.insert(0, "admin123")
