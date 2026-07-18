@@ -27,8 +27,36 @@ def trouver_individu_par_id(target_id, gedcom_parser):
             return e
     return None
 
+def est_individu_vivant(ind_element, annee_actuelle):
+    birth_date = "Inconnue"
+    a_une_date_deces = False
+    for child in ind_element.get_child_elements():
+        if child.get_tag() == 'BIRT':
+            for sub in child.get_child_elements():
+                if sub.get_tag() == 'DATE': birth_date = sub.get_value().strip()
+        if child.get_tag() == 'DEAT':
+            a_une_date_deces = True
+
+    if a_une_date_deces:
+        return False
+
+    annee_naissance = None
+    if birth_date and birth_date not in ["Inconnu", "Inconnue", ""]:
+        mots = birth_date.split()
+        for mot in mots:
+            if mot.isdigit() and len(mot) == 4:
+                annee_naissance = int(mot)
+                break
+
+    if annee_naissance:
+        if (annee_actuelle - annee_naissance) >= 100:
+            return False
+        else:
+            return True
+    else:
+        return True
+
 def obtenir_php_tracking_header(ip_exclue):
-    # Si le champ est resté vide ou contient la valeur par défaut, on applique une IP fictive
     ip_filtrage = ip_exclue.strip() if ip_exclue.strip() else "0.0.0.0"
     
     return f"""<?php
@@ -66,14 +94,11 @@ function est_robot($user_agent) {{
 
 $ip_brute = $_SERVER['REMOTE_ADDR'];
 
-// --- BLOC D'ENREGISTREMENT EXÉCUTÉ UNIQUEMENT SI L'IP N'EST PAS EXCLUE ---
 if ($ip_brute !== '{ip_filtrage}') {{
-
-    // Anonymisation de l'IP pour conformité CNIL/RGPD (masque le dernier octet)
     if (strpos($ip_brute, '.') !== false) {{
-        $ip = preg_replace('/\\.\\d+$/', '.0', $ip_brute); // IPv4
+        $ip = preg_replace('/\\.\\d+$/', '.0', $ip_brute);
     }} else {{
-        $ip = preg_replace('/:[a-f0-9]+$/i', ':0', $ip_brute); // IPv6
+        $ip = preg_replace('/:[a-f0-9]+$/i', ':0', $ip_brute);
     }}
 
     $page = (dirname($_SERVER['PHP_SELF']) != '/' ? basename(dirname($_SERVER['PHP_SELF'])). '/' : '') . basename($_SERVER['PHP_SELF']);
@@ -114,6 +139,13 @@ if ($ip_brute !== '{ip_filtrage}') {{
 """
 
 def generer_page_individu(individu, gedcom_parser, output_dir, config):
+    annee_actuelle = datetime.now().year
+    est_vivant = est_individu_vivant(individu, annee_actuelle)
+
+    # SÉCURITÉ STRINTE : Si la personne est vivante, aucun fichier n'est écrit
+    if est_vivant:
+        return
+
     pointer = individu.get_pointer()
     nom = "".join(individu.get_name()[1]).strip()
     prenom = "".join(individu.get_name()[0]).strip()
@@ -133,48 +165,12 @@ def generer_page_individu(individu, gedcom_parser, output_dir, config):
                 if sub.get_tag() == 'DATE': death_date = sub.get_value().strip()
                 if sub.get_tag() == 'PLAC': death_place = sub.get_value().strip()
 
-    def extraire_annee(texte_date):
-        if not texte_date or texte_date in ["Inconnu", "Inconnue", ""]:
-            return None
-        mots = texte_date.split()
-        for mot in mots:
-            if mot.isdigit() and len(mot) == 4:
-                return int(mot)
-        return None
-
-    annee_actuelle = datetime.now().year
-    annee_naissance = extraire_annee(birth_date)
-    a_une_date_deces = (death_date != "Inconnu" and death_date != "")
-
-    if a_une_date_deces:
-        statut_de_vie = "Décédé(e)"
-        est_vivant = False
-    elif annee_naissance:
-        if (annee_actuelle - annee_naissance) >= 100:
-            statut_de_vie = "Supposé(e) décédé(e)"
-            est_vivant = False
-        else:
-            statut_de_vie = "Vivant(e)"
-            est_vivant = True
+    nom_affichage = nom
+    prenom_affichage = prenom
+    if death_date != "Inconnu" and death_date != "":
+        ligne_deces_html = f"<p><strong>⚰️ Décès :</strong> Le {death_date} — 📍 {death_place}</p>"
     else:
-        statut_de_vie = "Vivant(e)"
-        est_vivant = True
-
-    if est_vivant:
-        birth_date = "[CONFIDENTIEL]"
-        birth_place = "[CONFIDENTIEL]"
-        nom_affichage = f"{nom} (Masqué)"
-        prenom_affichage = prenom
-        ligne_deces_html = f"<p><strong>⚰️ Décès :</strong> {statut_de_vie}</p>"
-        badge_prive_html = '<p class="statut-vivant">🔒 Fiche restreinte (Données protégées)</p>'
-    else:
-        nom_affichage = nom
-        prenom_affichage = prenom
-        badge_prive_html = ''
-        if a_une_date_deces:
-            ligne_deces_html = f"<p><strong>⚰️ Décès :</strong> Le {death_date} — 📍 {death_place}</p>"
-        else:
-            ligne_deces_html = f"<p><strong>⚰️ Décès :</strong> {statut_de_vie}</p>"
+        ligne_deces_html = "<p><strong>⚰️ Décès :</strong> Supposé(e) décédé(e)</p>"
 
     parents_html = ""
     id_familles_parents = []
@@ -189,10 +185,20 @@ def generer_page_individu(individu, gedcom_parser, output_dir, config):
                 if sub.get_tag() == 'WIFE': id_mere = sub.get_value()
             if id_pere:
                 p_obj = trouver_individu_par_id(id_pere, gedcom_parser)
-                if p_obj: parents_html += f"<li><strong>Père :</strong> <a href='{generer_nom_fichier_php(p_obj)}'>{' '.join(p_obj.get_name()).strip()}</a></li>"
+                if p_obj:
+                    if est_individu_vivant(p_obj, annee_actuelle):
+                        parents_html += "<li><strong>Père :</strong> Confidentiel</li>"
+                    else:
+                        p_nom = ' '.join(p_obj.get_name()).strip()
+                        parents_html += f"<li><strong>Père :</strong> <a href='{generer_nom_fichier_php(p_obj)}'>{p_nom}</a></li>"
             if id_mere:
                 m_obj = trouver_individu_par_id(id_mere, gedcom_parser)
-                if m_obj: parents_html += f"<li><strong>Mère :</strong> <a href='{generer_nom_fichier_php(m_obj)}'>{' '.join(m_obj.get_name()).strip()}</a></li>"
+                if m_obj:
+                    if est_individu_vivant(m_obj, annee_actuelle):
+                        parents_html += "<li><strong>Mère :</strong> Confidentiel</li>"
+                    else:
+                        m_nom = ' '.join(m_obj.get_name()).strip()
+                        parents_html += f"<li><strong>Mère :</strong> <a href='{generer_nom_fichier_php(m_obj)}'>{m_nom}</a></li>"
 
     if not parents_html: parents_html = "<li>Aucun parent répertorié.</li>"
 
@@ -210,38 +216,47 @@ def generer_page_individu(individu, gedcom_parser, output_dir, config):
                 if sub.get_tag() == 'WIFE': id_mere = sub.get_value()
 
             id_conjoint = id_mere if id_pere == pointer else id_pere
+            
             mariage_info = ""
+            has_marriage = False
+            m_date, m_place = "Date inconnue", "Lieu inconnu"
             for sub in root_child.get_child_elements():
                 if sub.get_tag() == 'MARR':
-                    m_date, m_place = "Date inconnue", "Lieu inconnu"
+                    has_marriage = True
                     for m_sub in sub.get_child_elements():
                         if m_sub.get_tag() == 'DATE': m_date = m_sub.get_value()
                         if m_sub.get_tag() == 'PLAC': m_place = m_sub.get_value()
-                    mariage_info = " - 💍 [UNION CONFIDENTIELLE]" if est_vivant else f" - 💍 Mariage le {m_date} à {m_place}"
-
-            if not mariage_info and est_vivant:
-                mariage_info = " - 💍 [UNION CONFIDENTIELLE]"
 
             if id_conjoint:
                 c_obj = trouver_individu_par_id(id_conjoint, gedcom_parser)
-                if c_obj: conjoints_html += f"<li>💑 <a href='{generer_nom_fichier_php(c_obj)}'>{' '.join(c_obj.get_name()).strip()}</a>{mariage_info}</li>"
+                if c_obj:
+                    if est_individu_vivant(c_obj, annee_actuelle):
+                        conjoints_html += "<li>💑 Confidentiel</li>"
+                    else:
+                        if has_marriage:
+                            mariage_info = f" - 💍 Mariage le {m_date} à {m_place}"
+                        c_nom = ' '.join(c_obj.get_name()).strip()
+                        conjoints_html += f"<li>💑 <a href='{generer_nom_fichier_php(c_obj)}'>{c_nom}</a>{mariage_info}</li>"
             
             for sub in root_child.get_child_elements():
                 if sub.get_tag() == 'CHIL':
                     id_enfant = sub.get_value()
                     e_obj = trouver_individu_par_id(id_enfant, gedcom_parser)
-                    if e_obj: enfants_html += f"<li>👶 <a href='{generer_nom_fichier_php(e_obj)}'>{' '.join(e_obj.get_name()).strip()}</a></li>"
+                    if e_obj:
+                        # Si l'enfant est vivant, on écrit juste "Confidentiel" (pas de lien)
+                        if est_individu_vivant(e_obj, annee_actuelle):
+                            enfants_html += "<li>👶 Confidentiel</li>"
+                        else:
+                            e_nom = ' '.join(e_obj.get_name()).strip()
+                            enfants_html += f"<li>👶 <a href='{generer_nom_fichier_php(e_obj)}'>{e_nom}</a></li>"
 
     if not conjoints_html: conjoints_html = "<li>Célibataire ou aucune union enregistrée.</li>"
     if not enfants_html: enfants_html = "<li>Aucun enfant enregistré.</li>"
 
-    if not est_vivant:
-        notes_section_html = """        <section class="section-fiche notes-personnelles">
+    notes_section_html = """        <section class="section-fiche notes-personnelles">
             <h2>✍️ Notes & Notes Historiques</h2>
             <p><em>Aucune note ou histoire enregistrée pour le moment.</em></p>
         </section>"""
-    else:
-        notes_section_html = "        "
 
     recherche_html = """
     <div class="search-container">
@@ -268,7 +283,6 @@ def generer_page_individu(individu, gedcom_parser, output_dir, config):
     <style>
         .section-fiche {{ text-align: left; margin-top: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 5px; background: #fff; }}
         .parentes-list {{ padding-left: 20px; list-style-type: square; }}
-        .statut-vivant {{ color: #d35400; font-weight: bold; background: #fdf2e9; padding: 5px; border-radius: 3px; display: inline-block; margin-top: 5px; }}
     </style>
 </head>
 <body>
@@ -276,7 +290,6 @@ def generer_page_individu(individu, gedcom_parser, output_dir, config):
     <main class="container">
         <header>
             <h1>{prenom_affichage} {nom_affichage}</h1>
-            {badge_prive_html}
         </header>
 
         <div class="encadre" style="border-top: none; background: #fdfdfd; padding: 15px;">
@@ -373,7 +386,7 @@ def generer_page_mentions(output_dir, config):
         <h2>3. Vie privée & RGPD</h2>
         <p>Conformément aux directives du RGPD et de la CNIL :</p>
         <ul>
-            <li>Les personnes vivantes (de moins de 100 ans) sont automatiquement anonymisées (leurs données sensibles portent la mention <i>[CONFIDENTIEL]</i>).</li>
+            <li>Les personnes vivantes (de moins de 100 ans) sont totalement masquées pour des raisons de confidentialité. Aucune fiche n'est créée à leur nom, et elles apparaissent uniquement sous la mention non cliquable <i>Confidentiel</i> dans les fratries.</li>
             <li>Si vous apparaissez sur ce site et souhaitez exercer votre droit de retrait ou de modification, merci de contacter l'auteur via l'adresse ci-dessus.</li>
             <li><strong>Statistiques :</strong> Les adresses IP des visiteurs collectées à des fins statistiques sont immédiatement anonymisées (le dernier octet est tronqué à 0), empêchant toute identification des personnes.</li>
         </ul>
@@ -441,7 +454,6 @@ def generer_page_contact(output_dir, config):
         <p style="color: #666; margin-bottom: 25px;">Utilisez le formulaire ci-dessous pour envoyer un message concernant les recherches de cet arbre.</p>
 
         <?php
-        // Calcul intelligent de l'URL de redirection pour gérér dynamiquement les dossiers (ex: /site_web/)
         $protocol = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http');
         $host = $_SERVER['HTTP_HOST'];
         $directory = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\\\');
@@ -450,9 +462,7 @@ def generer_page_contact(output_dir, config):
 
         <form action="https://formsubmit.co/{config['contact']}" method="POST">
             <input type="text" name="_honey" style="display:none">
-            
             <input type="hidden" name="_template" value="table">
-            
             <input type="hidden" name="_next" value="<?php echo $next_url; ?>">
 
             <div class="form-group">
@@ -488,6 +498,13 @@ def generer_page_contact(output_dir, config):
 def execution_generation(config):
     chemin_ged = config["ged_path"]
     output_dir = "./site_web"
+    
+    # Nettoyage de sécurité : on supprime d'abord l'ancien dossier individus s'il existe 
+    # pour effacer les anciennes fiches résiduelles des personnes vivantes.
+    import shutil
+    if os.path.exists(os.path.join(output_dir, "individus")):
+        shutil.rmtree(os.path.join(output_dir, "individus"))
+        
     os.makedirs(os.path.join(output_dir, "individus"), exist_ok=True)
     os.makedirs(os.path.join(output_dir, "assets"), exist_ok=True)
     
@@ -508,7 +525,7 @@ def execution_generation(config):
             --accent-color: {config['c_liens']}; 
             --text-color: #333; 
         }}
-        * {{ box-sizing: border-box; }}
+        * {{ box-spacing: border-box; }}
         body {{ font-family: {police_alternative} !important; background: var(--bg-color); color: var(--text-color); margin: 0; padding: 20px; }}
         .container {{ max-width: 950px; margin: 20px auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); text-align: center; }}
         h1, h2, h3, h4 {{ color: var(--primary-color); font-family: {police_alternative} !important; }}
@@ -551,14 +568,14 @@ def execution_generation(config):
             
             const requete = valeur.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
             
-            const correspondances = baseDonneesRecherche.filter(ind => {
+            const correspondances = baseDonneesRecherche.filter(function(ind) {
                 const nomNormalise = ind.nom.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
                 return nomNormalise.includes(requete);
             });
             
             if (correspondances.length > 0) {
                 divResultats.style.display = 'block';
-                correspondances.forEach(ind => {
+                correspondances.forEach(function(ind) {
                     const lien = document.createElement('a');
                     lien.href = prefixeRelatif + ind.lien;
                     lien.className = 'search-item';
@@ -601,9 +618,17 @@ def execution_generation(config):
     dictionnaire_lettres = {}
     liste_recherche = []
     total_individus = 0
+    annee_actuelle = datetime.now().year
     
+    # Génération exclusive des pages et indexations pour les personnes décédées
     for element in child_elements:
         if isinstance(element, IndividualElement):
+            est_vivant = est_individu_vivant(element, annee_actuelle)
+            
+            # Si vivant, on ignore complètement (ni écriture de fichier ni indexation)
+            if est_vivant:
+                continue
+                
             generer_page_individu(element, gedcom_parser, output_dir, config)
             total_individus += 1
             
@@ -611,32 +636,9 @@ def execution_generation(config):
             prenom = "".join(element.get_name()[0]).strip()
             filename = f"individus/{generer_nom_fichier_php(element)}"
             
-            annee_actuelle = datetime.now().year
-            birth_date = ""
-            for child in element.get_child_elements():
-                if child.get_tag() == 'BIRT':
-                    for sub in child.get_child_elements():
-                        if sub.get_tag() == 'DATE': birth_date = sub.get_value().strip()
-            
-            def extraire_annee_loc(texte_date):
-                if not texte_date: return None
-                for mot in texte_date.split():
-                    if mot.isdigit() and len(mot) == 4: return int(mot)
-                return None
-                
-            annee_naissance = extraire_annee_loc(birth_date)
-            a_une_date_deces = any(c.get_tag() == 'DEAT' for c in element.get_child_elements())
-            
-            est_vivant = True
-            if a_une_date_deces or (annee_naissance and (annee_actuelle - annee_naissance) >= 100):
-                est_vivant = False
-                
-            if est_vivant:
-                nom_complet = f"{nom} (Masqué) {prenom}"
-            else:
-                nom_complet = f"{nom} {prenom}"
-            
+            nom_complet = f"{nom} {prenom}"
             texte_brut = f"{nom} {prenom}".lower()
+                
             nom_tri = "".join(c for c in unicodedata.normalize("NFD", texte_brut) if unicodedata.category(c) != 'Mn')
                 
             liste_recherche.append({"nom": nom_complet, "lien": filename, "tri": nom_tri})
@@ -707,7 +709,6 @@ def execution_generation(config):
         with open(os.path.join(output_dir, f"patronymes-{lettre}.php"), "w", encoding="utf-8") as f:
             f.write(html_lettre)
 
-    # PAGE STATS.PHP AVEC LE SYSTÈME DE VÉRIFICATION PAR MOT DE PASSE SÉCURISÉ ET GÉOLOCALISATION
     html_page_stats = f"""<?php
 if (!isset($_SESSION)) {{ session_start(); }}
 define('STATS_PASSWORD', '{config.get("stats_password", "admin123")}');
@@ -972,7 +973,6 @@ ErrorDocument 404 /404.php
         f.write(code_htaccess)
 
     html_404 = php_header + f"""<?php
-    // Détermination dynamique de l'emplacement du site
     $root_path = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\\\');
     if ($root_path === '/' || $root_path === '\\\\') {{
         $root_path = '';
@@ -1069,7 +1069,6 @@ class ApplicationConfiguration:
         self.entry_stats_pass.insert(0, "admin123")
         self.entry_stats_pass.pack(fill="x", pady=(0, 12))
 
-        # Champ de saisie personnalisé pour masquer/saisir l'adresse IP
         tk.Label(root, text="Votre adresse IP à exclure du tracking (Optionnel) :", font=("Arial", 10, "bold")).pack(anchor="w")
         self.entry_ip = tk.Entry(root, width=70)
         self.entry_ip.insert(0, "mon IP")
