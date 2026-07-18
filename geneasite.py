@@ -27,12 +27,15 @@ def trouver_individu_par_id(target_id, gedcom_parser):
             return e
     return None
 
-# Code de tracking PHP avec ANONYMISATION DE L'IP.
-PHP_TRACKING_HEADER = r"""<?php
+def obtenir_php_tracking_header(ip_exclue):
+    # Si le champ est resté vide ou contient la valeur par défaut, on applique une IP fictive
+    ip_filtrage = ip_exclue.strip() if ip_exclue.strip() else "0.0.0.0"
+    
+    return f"""<?php
 // Script de compteur et tracking de visites (Compatible Free & Multi-dossiers & RGPD)
 $fichier_stats = rtrim($_SERVER['DOCUMENT_ROOT'], '/') . '/stats.json';
 
-function obtenir_os($user_agent) {
+function obtenir_os($user_agent) {{
     $os_platform = "Inconnu";
     $os_array = array(
         '/windows nt 10/i'      =>  'Windows 10/11',
@@ -47,61 +50,66 @@ function obtenir_os($user_agent) {
         '/ipad/i'               =>  'iPad (iOS)',
         '/android/i'            =>  'Android'
     );
-    foreach ($os_array as $regex => $value) {
-        if (preg_match($regex, $user_agent)) { $os_platform = $value; break; }
-    }
+    foreach ($os_array as $regex => $value) {{
+        if (preg_match($regex, $user_agent)) {{ $os_platform = $value; break; }}
+    }}
     return $os_platform;
-}
+}}
 
-function est_robot($user_agent) {
+function est_robot($user_agent) {{
     $bots = array('googlebot', 'bingbot', 'slurp', 'duckduckbot', 'baiduspider', 'yandexbot', 'sogou', 'exabot', 'facebot', 'ia_archiver', 'scan', 'bot');
-    foreach ($bots as $bot) {
-        if (strpos(strtolower($user_agent), $bot) !== false) { return "Robot/Scan"; }
-    }
+    foreach ($bots as $bot) {{
+        if (strpos(strtolower($user_agent), $bot) !== false) {{ return "Robot/Scan"; }}
+    }}
     return "Utilisateur";
-}
+}}
 
 $ip_brute = $_SERVER['REMOTE_ADDR'];
-// Anonymisation de l'IP pour conformité CNIL/RGPD (masque le dernier octet)
-if (strpos($ip_brute, '.') !== false) {
-    $ip = preg_replace('/\.\d+$/', '.0', $ip_brute); // IPv4
-} else {
-    $ip = preg_replace('/:[a-f0-9]+$/i', ':0', $ip_brute); // IPv6
-}
 
-$page = (dirname($_SERVER['PHP_SELF']) != '/' ? basename(dirname($_SERVER['PHP_SELF'])). '/' : '') . basename($_SERVER['PHP_SELF']);
-$referer = isset($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : 'Direct / Favoris';
-$user_agent = isset($_SERVER['HTTP_USER_AGENT']) ? $_SERVER['HTTP_USER_AGENT'] : '';
-$date_complete = date('Y-m-d H:i:s');
-$mois = date('Y-m');
+// --- BLOC D'ENREGISTREMENT EXÉCUTÉ UNIQUEMENT SI L'IP N'EST PAS EXCLUE ---
+if ($ip_brute !== '{ip_filtrage}') {{
 
-$os = obtenir_os($user_agent);
-$type_visiteur = est_robot($user_agent);
+    // Anonymisation de l'IP pour conformité CNIL/RGPD (masque le dernier octet)
+    if (strpos($ip_brute, '.') !== false) {{
+        $ip = preg_replace('/\\.\\d+$/', '.0', $ip_brute); // IPv4
+    }} else {{
+        $ip = preg_replace('/:[a-f0-9]+$/i', ':0', $ip_brute); // IPv6
+    }}
 
-$nouvelle_visite = array(
-    "date" => $date_complete,
-    "mois" => $mois,
-    "page" => $page,
-    "ip" => $ip,
-    "referer" => $referer,
-    "robot" => $type_visiteur,
-    "os" => $os
-);
+    $page = (dirname($_SERVER['PHP_SELF']) != '/' ? basename(dirname($_SERVER['PHP_SELF'])). '/' : '') . basename($_SERVER['PHP_SELF']);
+    $referer = isset($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : 'Direct / Favoris';
+    $user_agent = isset($_SERVER['HTTP_USER_AGENT']) ? $_SERVER['HTTP_USER_AGENT'] : '';
+    $date_complete = date('Y-m-d H:i:s');
+    $mois = date('Y-m');
 
-$historique = [];
-if (file_exists($fichier_stats)) {
-    $contenu = file_get_contents($fichier_stats);
-    $historique = json_decode($contenu, true);
-    if (!is_array($historique)) { $historique = []; }
-}
+    $os = obtenir_os($user_agent);
+    $type_visiteur = est_robot($user_agent);
 
-$historique[] = $nouvelle_visite;
+    $nouvelle_visite = array(
+        "date" => $date_complete,
+        "mois" => $mois,
+        "page" => $page,
+        "ip" => $ip,
+        "referer" => $referer,
+        "robot" => $type_visiteur,
+        "os" => $os
+    );
 
-if (count($historique) > 5000) {
-    $historique = array_slice($historique, -5000);
-}
+    $historique = [];
+    if (file_exists($fichier_stats)) {{
+        $contenu = file_get_contents($fichier_stats);
+        $historique = json_decode($contenu, true);
+        if (!is_array($historique)) {{ $historique = []; }}
+    }}
 
-file_put_contents($fichier_stats, json_encode($historique));
+    $historique[] = $nouvelle_visite;
+
+    if (count($historique) > 5000) {{
+        $historique = array_slice($historique, -5000);
+    }}
+
+    file_put_contents($fichier_stats, json_encode($historique));
+}}
 ?>
 """
 
@@ -249,7 +257,8 @@ def generer_page_individu(individu, gedcom_parser, output_dir, config):
     if config["contact"]:
         html_contact_block = '<p>📧 <a href="../contact.php">Contacter l\'auteur</a></p>'
 
-    html_content = PHP_TRACKING_HEADER + f"""<!DOCTYPE html>
+    php_header = obtenir_php_tracking_header(config.get("mon_ip", ""))
+    html_content = php_header + f"""<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -312,6 +321,7 @@ def generer_page_individu(individu, gedcom_parser, output_dir, config):
             </p>
         </footer>
         <p style="margin-top: 20px;"><a href="../index.php">← Retour à l'accueil principal</a></p>
+             
     </main>
 
     <script src="../assets/donnees_recherche.js"></script>
@@ -323,7 +333,6 @@ def generer_page_individu(individu, gedcom_parser, output_dir, config):
         f.write(html_content)
 
 def generer_page_mentions(output_dir, config):
-    """Génère automatiquement le fichier mentions.php avec le système de tracking officiel et un texte de base"""
     html_body = f"""<!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -376,12 +385,12 @@ def generer_page_mentions(output_dir, config):
 </body>
 </html>
 """
-    html_complet = PHP_TRACKING_HEADER + "\n" + html_body
+    php_header = obtenir_php_tracking_header(config.get("mon_ip", ""))
+    html_complet = php_header + "\n" + html_body
     with open(os.path.join(output_dir, "mentions.php"), "w", encoding="utf-8") as f:
         f.write(html_complet)
 
 def generer_page_merci(output_dir, config):
-    """Génère la page merci.php affichée après l'envoi d'un message"""
     html_body = f"""<!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -401,12 +410,12 @@ def generer_page_merci(output_dir, config):
 </body>
 </html>
 """
-    html_complet = PHP_TRACKING_HEADER + "\n" + html_body
+    php_header = obtenir_php_tracking_header(config.get("mon_ip", ""))
+    html_complet = php_header + "\n" + html_body
     with open(os.path.join(output_dir, "merci.php"), "w", encoding="utf-8") as f:
         f.write(html_complet)
 
 def generer_page_contact(output_dir, config):
-    """Génère la page contact.php contenant le formulaire dynamique FormSubmit universel"""
     html_body = f"""<!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -442,6 +451,8 @@ def generer_page_contact(output_dir, config):
         <form action="https://formsubmit.co/{config['contact']}" method="POST">
             <input type="text" name="_honey" style="display:none">
             
+            <input type="hidden" name="_template" value="table">
+            
             <input type="hidden" name="_next" value="<?php echo $next_url; ?>">
 
             <div class="form-group">
@@ -469,7 +480,8 @@ def generer_page_contact(output_dir, config):
 </body>
 </html>
 """
-    html_complet = PHP_TRACKING_HEADER + "\n" + html_body
+    php_header = obtenir_php_tracking_header(config.get("mon_ip", ""))
+    html_complet = php_header + "\n" + html_body
     with open(os.path.join(output_dir, "contact.php"), "w", encoding="utf-8") as f:
         f.write(html_complet)
 
@@ -652,11 +664,13 @@ def execution_generation(config):
     </div>
     """
 
+    php_header = obtenir_php_tracking_header(config.get("mon_ip", ""))
+
     for lettre, individus in dictionnaire_lettres.items():
         individus.sort(key=lambda x: x["tri"])
         liens_individus_html = "".join([f'            <li><a href="{ind["lien"]}">{ind["nom_complet"]}</a></li>\n' for ind in individus])
             
-        html_lettre = PHP_TRACKING_HEADER + f"""<!DOCTYPE html>
+        html_lettre = php_header + f"""<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -684,7 +698,7 @@ def execution_generation(config):
             </p>
         </footer>
         <p style="margin-top:30px;"><a href="index.php">← Retour à l'accueil</a></p>
-    </main>
+   </main>
     <script src="assets/donnees_recherche.js"></script>
     <script src="assets/search.js"></script>
 </body>
@@ -693,7 +707,7 @@ def execution_generation(config):
         with open(os.path.join(output_dir, f"patronymes-{lettre}.php"), "w", encoding="utf-8") as f:
             f.write(html_lettre)
 
-    # PAGE STATS.PHP AVEC LE SYSTÈME DE VÉRIFICATION PAR MOT DE PASSE SÉCURISÉ
+    # PAGE STATS.PHP AVEC LE SYSTÈME DE VÉRIFICATION PAR MOT DE PASSE SÉCURISÉ ET GÉOLOCALISATION
     html_page_stats = f"""<?php
 if (!isset($_SESSION)) {{ session_start(); }}
 define('STATS_PASSWORD', '{config.get("stats_password", "admin123")}');
@@ -836,7 +850,11 @@ foreach ($visites_inverses as $v) {{
                                 <tr>
                                     <td><strong><?php echo htmlspecialchars($visite['date']); ?></strong></td>
                                     <td><code><?php echo htmlspecialchars($visite['page']); ?></code></td>
-                                    <td><?php echo htmlspecialchars($visite['ip']); ?></td>
+                                    <td>
+                                        <a href="https://ipapi.co/<?php echo urlencode($visite['ip']); ?>/" target="_blank" rel="noopener noreferrer" style="color: var(--accent-color); text-decoration: underline; font-weight: bold;">
+                                            <?php echo htmlspecialchars($visite['ip']); ?> 🔗
+                                        </a>
+                                    </td>
                                     <td style="font-size:0.9em; max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="<?php echo htmlspecialchars($visite['referer']); ?>"><?php echo htmlspecialchars($visite['referer']); ?></td>
                                     <td><span style="color: <?php echo (isset($visite['robot']) && $visite['robot'] === 'Robot/Scan') ? '#c0392b':'#27ae60'; ?>; font-weight:bold;"><?php echo htmlspecialchars(isset($visite['robot']) ? $visite['robot'] : 'Utilisateur'); ?></span></td>
                                     <td><?php echo htmlspecialchars(isset($visite['os']) ? $visite['os'] : 'Inconnu'); ?></td>
@@ -886,7 +904,7 @@ foreach ($visites_inverses as $v) {{
     if config["contact"]:
         html_contact_block = '<p>📧 <a href="contact.php">Contacter l\'auteur</a></p>'
 
-    html_accueil = PHP_TRACKING_HEADER + f"""<!DOCTYPE html>
+    html_accueil = php_header + f"""<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
@@ -924,6 +942,7 @@ foreach ($visites_inverses as $v) {{
                 <a href="mentions.php" style="color: #999; text-decoration: underline;">Mentions légales & Confidentialité</a>
             </p>
         </footer>
+        
     </main>
 
     <script src="assets/donnees_recherche.js"></script>
@@ -935,15 +954,9 @@ foreach ($visites_inverses as $v) {{
         f.write(html_accueil)
         
     generer_page_mentions(output_dir, config)
-    
-    # Génération des nouvelles pages de contact et de merci
     generer_page_contact(output_dir, config)
     generer_page_merci(output_dir, config)
     
-# AJOUT DU .HTACCESS ET DE LA PAGE 404.PHP 
-    
-# Création du fichier .htaccess à la racine du site web généré.
-
     code_htaccess = """# 1. Activation de PHP 5.6 sur les serveurs Pages Perso de Free.fr
 <IfDefine Free>
 php56 1 
@@ -958,8 +971,7 @@ ErrorDocument 404 /404.php
     with open(os.path.join(output_dir, ".htaccess"), "w", encoding="utf-8", newline="\n") as f:
         f.write(code_htaccess)
 
-# Création de la page d'erreur 404 universelle qui s'adapte au dossier courant
-    html_404 = PHP_TRACKING_HEADER + f"""<?php
+    html_404 = php_header + f"""<?php
     // Détermination dynamique de l'emplacement du site
     $root_path = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\\\');
     if ($root_path === '/' || $root_path === '\\\\') {{
@@ -1004,8 +1016,8 @@ ErrorDocument 404 /404.php
 class ApplicationConfiguration:
     def __init__(self, root):
         self.root = root
-        self.root.title("GénéaSite - Configuration PHP (Free)")
-        self.root.geometry("690x900")
+        self.root.title("GénéaSit - Configuration PHP (Free)")
+        self.root.geometry("690x940")
         self.root.configure(padx=15, pady=15)
 
         self.color_fond = "#f4f6f9"
@@ -1056,6 +1068,12 @@ class ApplicationConfiguration:
         self.entry_stats_pass = tk.Entry(root, width=70, show="*")
         self.entry_stats_pass.insert(0, "admin123")
         self.entry_stats_pass.pack(fill="x", pady=(0, 12))
+
+        # Champ de saisie personnalisé pour masquer/saisir l'adresse IP
+        tk.Label(root, text="Votre adresse IP à exclure du tracking (Optionnel) :", font=("Arial", 10, "bold")).pack(anchor="w")
+        self.entry_ip = tk.Entry(root, width=70)
+        self.entry_ip.insert(0, "mon IP")
+        self.entry_ip.pack(fill="x", pady=(0, 12))
 
         tk.Label(root, text="Police de caractères générale du site :", font=("Arial", 10, "bold")).pack(anchor="w")
         self.var_police = tk.StringVar(value="Segoe UI")
@@ -1109,12 +1127,17 @@ class ApplicationConfiguration:
             messagebox.showerror("Erreur", "Veuillez sélectionner un fichier GEDCOM valide.")
             return
 
+        ip_saisie = self.entry_ip.get().strip()
+        if ip_saisie == "mon IP":
+            ip_saisie = ""
+
         config = {
             "ged_path": self.entry_ged.get().strip(),
             "titre_principal": self.entry_titre.get().strip() or "Ma généalogie",
             "auteur": self.entry_auteur.get().strip() or "Auteur",
             "contact": self.entry_contact.get().strip(),
             "stats_password": self.entry_stats_pass.get().strip() or "admin123",
+            "mon_ip": ip_saisie,
             "police": self.var_police.get(),
             "c_fond": self.color_fond,
             "c_titres": self.color_titres,
