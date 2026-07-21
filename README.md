@@ -72,7 +72,3 @@ Pour publier votre site :
 ## 📄 Licence & Crédits
 
     Auteur : JanusEye
-
-    Pied de page : Un discret lien de crédit est inclus en bas de page pour permettre à d'autres passionnés de découvrir l'outil.
-
-    Code source : Mis à disposition librement pour la communauté généalogique.
