@@ -1,62 +1,78 @@
-# geneasite
-# 🧬 GénéaSite
+# 🧬 GénéaSite — Du GEDCOM au site web PHP
 
-GénéaSite est un script Python qui permet de générer automatiquement un site internet généalogique complet, dynamique et moderne en PHP, à partir d'un simple fichier d'exportation **GEDCOM (.ged)**. 
+**GénéaSite** est un script Python qui permet de générer automatiquement un site internet généalogique complet, dynamique et moderne en **PHP**, à partir d'un simple fichier d'exportation GEDCOM (`.ged`).
 
-Ce système a été spécialement conçu et optimisé pour être hébergé gratuitement sur les **Pages Perso de Free**, mais il fonctionne sur n'importe quel serveur supportant le PHP.
-
----
-
-🔒 Sécurité & Protection des Données (RGPD)
-
-La confidentialité de vos données familiales est notre priorité absolue :
-* **Aucun fichier GEDCOM sur le serveur :** Votre fichier `.ged` reste exclusivement sur votre ordinateur. Le script le lit localement, extrait les données, puis génère uniquement des pages PHP anonymisées. Le fichier source n'est jamais transféré sur internet.
-* **Protection des personnes vivantes :** Le script détecte automatiquement les personnes de moins de 100 ans sans date de décès. Leurs fiches sont automatiquement verrouillées, affichant la mention `[CONFIDENTIEL]` pour la date/lieu de naissance et masquant leur nom de famille.
-* **Anonymisation des Visiteurs (RGPD) :** Le compteur de visites intégré masque le dernier octet des adresses IP des visiteurs (ex: `192.168.1.0`), garantissant une totale conformité avec les règles de la CNIL et du RGPD.
-* **Lien de partage :** Un discret lien de crédit est inclus dans le pied de page de votre site (`Généré via l'application GénéaSite`), renvoyant vers le site officiel du projet pour permettre à d'autres passionnés de découvrir et d'utiliser ce script gratuit.
+Ce système a été spécialement conçu et optimisé pour être hébergé facilement sur les **Pages Perso de Free**, mais il est également compatible avec n'importe quel autre serveur Web supportant le PHP.
 
 ---
 
-⚙️ Fonctionnalités & Options
+## 🔒 Sécurité & Protection des Données (RGPD)
 
-L'application intègre une interface graphique complète permettant de personnaliser votre site avant la génération :
-* **Choix du design :** Configuration personnalisée de la couleur du fond, de la couleur des titres et de la couleur des liens.
-* **Gestion des polices :** Support complet des polices universelles (Arial, Verdana, etc.) et intégration automatique et sécurisée de la police moderne *Comic Neue* (via Google Fonts) pour un affichage parfait des accents français sur ordinateurs et smartphones.
-* **Moteur de recherche local :** Une barre de recherche prédictive instantanée est intégrée sur l'accueil et sur chaque fiche.
-* **Statistiques privées :** Un tableau de bord administrateur sécurisé (`stats.php`) permet de suivre le nombre de visites mensuelles, de distinguer les humains des robots de recherche, et de télécharger ou vider l'historique.
-* **Lien de partage :** Un discret lien de crédit est inclus dans le pied de page de votre site (`Généré via l'application GénéaSite`), renvoyant vers le site officiel du projet pour permettre à d'autres passionnés de découvrir et d'utiliser ce script gratuit.
+La confidentialité de vos données familiales et le respect de la vie privée sont au cœur du projet :
+
+* **Aucun fichier GEDCOM transféré :** Votre fichier `.ged` reste exclusivement sur votre ordinateur. Le script le lit en local et génère des fichiers PHP prêts à l'emploi. Le fichier source n'est jamais envoyé sur Internet.
+* **Non-création des personnes vivantes :** Le script identifie automatiquement les personnes de moins de 100 ans sans date de décès. **Aucune fiche HTML/PHP n'est créée pour elles**. Elles sont totalement absentes du site public ou apparaissent simplement sous la mention non cliquable *`Confidentiel`* au sein des fratries et parentés.
+* **Redirection HTTPS & Gestion des adresses :**
+  * **Hébergement Free :** Prise en charge automatique de la conversion du login (ex: `nom1.nom2` est converti automatiquement vers `nom1-nom2.pages-perso.free.fr`).
+  * **Redirection sécurisée :** Le script intègre la redirection automatique vers le HTTPS si un nom de domaine est configuré.
+* **Anonymisation des Visiteurs (RGPD) :** Le compteur de visites anonymise automatiquement l'adresse IP des visiteurs en tronquant le dernier octet (ex: `192.168.1.0`), garantissant une totale conformité avec les recommandations de la CNIL et du RGPD.
+* **Page Mentions Légales & Formulaire de Contact :** Génération automatique d'une page `mentions.php` conforme au RGPD et d'un formulaire de contact (`contact.php`) sécurisé sans exposition en clair de votre adresse e-mail.
 
 ---
 
-🚀 Procédure d'Utilisation
+## ⚙️ Fonctionnalités & Options
 
-1. Prérequis
-Vous devez disposer de Python 3 installé sur votre machine et de la bibliothèque de lecture GEDCOM. Pour l'installer, ouvrez un terminal et tapez :
+L'application intègre une interface graphique Tkinter complète pour personnaliser votre site :
+
+* **Sélection de l'hébergeur :** Choix entre **Free** (avec conversion automatique de l'URL) et **Autre hébergeur** (pour nom de domaine personnalisé ou DDNS).
+* **Personnalisation visuelle :** Choix des couleurs (fond, titres, liens/accents) et support des balises HTML (`<b>`, `<i>`, `<center>`, etc.) dans les textes de présentation.
+* **Gestion des polices :** Support des polices système et intégration automatique de la police moderne *Comic Neue* (via Google Fonts).
+* **Moteur de recherche instantané :** Barre de recherche prédictive en JavaScript intégrée sur l'accueil, les fiches individuelles et la page d'erreur 404.
+* **Statistiques de visite privées :** Espace d'administration sécurisé par mot de passe (`stats.php`) permettant de suivre les visites mensuelles, de filtrer les robots, de géolocaliser les IP anonymisées, ainsi que de télécharger ou vider le journal (`stats.json`).
+* **Filtrage d'IP personnelle :** Option pour exclure votre propre adresse IP des statistiques afin de ne pas fausser le compteur lors de vos visites.
+
+---
+
+## 🚀 Procédure d'Utilisation
+
+### 1. Prérequis
+Vous devez disposer de Python 3 installé sur votre machine ainsi que de la bibliothèque de lecture GEDCOM. Pour l'installer, ouvrez votre terminal et tapez :
 
 pip install python-gedcom
 
+### 2. Lancement du script
 
-2. Lancement du script
+Lancez l'interface graphique depuis votre terminal :
 
-    Lancez le script depuis votre terminal ou console :
+python generate_site.py
+# ou 
+python3 generate_site.py
 
-    python3 generate_site.py
-
-
-3. Configuration et Génération
+### 3. Configuration et Génération
 
     Cliquez sur Parcourir... pour sélectionner votre fichier .ged.
 
-    Remplissez le titre de votre site, votre nom d'auteur et votre adresse e-mail de contact (qui sera automatiquement protégée contre le spam par inversion de chaîne dans le code).
+    Choisissez le type d'hébergeur (Free ou Non Free) et saisissez votre identifiant ou nom de domaine.
 
-    Personnalisez votre texte d'introduction (les balises HTML comme <b>, <i>, <center> sont acceptées).
+    Renseignez le titre de votre site, le nom de l'auteur, votre e-mail de contact et le mot de passe souhaité pour l'accès aux statistiques.
 
-    Choisissez vos couleurs et votre police, puis cliquez sur 🚀 Générer le site Internet (PHP).
+    (Optionnel) Saisissez votre adresse IP pour ne pas la comptabiliser dans les statistiques.
 
+    Personnalisez l'apparence (couleurs, police, texte d'introduction) puis cliquez sur 🚀 Générer le site Internet (PHP).
 
-4. Mise en ligne
+### 4. Mise en ligne
 
-Le script crée instantanément un dossier nommé site_web.
-Pour le mettre en ligne, connectez-vous à votre espace Free via un logiciel FTP (comme FileZilla) et transférez l'intégralité du contenu de ce dossier site_web à la racine de vos pages perso.
+Le script crée un dossier nommé site_web.
+Pour publier votre site :
 
-Généré avec passion par JanusEye — Code mis à disposition librement.
+    Connectez-vous à votre hébergeur via un client FTP (comme FileZilla).
+
+    Transférez l'intégralité du contenu du dossier site_web à la racine de votre espace d'hébergement.
+
+## 📄 Licence & Crédits
+
+    Auteur : JanusEye
+
+    Pied de page : Un discret lien de crédit est inclus en bas de page pour permettre à d'autres passionnés de découvrir l'outil.
+
+    Code source : Mis à disposition librement pour la communauté généalogique.
