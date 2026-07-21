@@ -2,6 +2,7 @@ import os
 import json
 from datetime import datetime
 import unicodedata
+import shutil
 import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext, colorchooser
 from gedcom.parser import Parser
@@ -56,11 +57,23 @@ def est_individu_vivant(ind_element, annee_actuelle):
     else:
         return True
 
-def obtenir_php_tracking_header(ip_exclue):
+def obtenir_php_tracking_header(ip_exclue, url_domaine=""):
     ip_filtrage = ip_exclue.strip() if ip_exclue.strip() else "0.0.0.0"
     
+    # Construction de la ligne de redirection HTTPS si un domaine est renseigné
+    code_redirection_https = ""
+    if url_domaine.strip():
+        domaine_clean = url_domaine.strip().replace("https://", "").replace("http://", "").rstrip("/")
+        code_redirection_https = f"""
+if (empty($_SERVER['HTTPS']) || $_SERVER['HTTPS'] === 'off') {{
+    $url_securisee = 'https://{domaine_clean}' . $_SERVER['REQUEST_URI'];
+    header('HTTP/1.1 301 Moved Permanently');
+    header('Location: ' . $url_securisee);
+    exit();
+}}"""
+
     return f"""<?php
-// Script de compteur et tracking de visites (Compatible Free & Multi-dossiers & RGPD)
+// Script de compteur et tracking de visites (Compatible Multi-hébergeurs & RGPD)
 $fichier_stats = rtrim($_SERVER['DOCUMENT_ROOT'], '/') . '/stats.json';
 
 function obtenir_os($user_agent) {{
@@ -134,7 +147,7 @@ if ($ip_brute !== '{ip_filtrage}') {{
     }}
 
     file_put_contents($fichier_stats, json_encode($historique));
-}}
+}}{code_redirection_https}
 ?>
 """
 
@@ -142,7 +155,6 @@ def generer_page_individu(individu, gedcom_parser, output_dir, config):
     annee_actuelle = datetime.now().year
     est_vivant = est_individu_vivant(individu, annee_actuelle)
 
-    # SÉCURITÉ STRINTE : Si la personne est vivante, aucun fichier n'est écrit
     if est_vivant:
         return
 
@@ -243,7 +255,6 @@ def generer_page_individu(individu, gedcom_parser, output_dir, config):
                     id_enfant = sub.get_value()
                     e_obj = trouver_individu_par_id(id_enfant, gedcom_parser)
                     if e_obj:
-                        # Si l'enfant est vivant, on écrit juste "Confidentiel" (pas de lien)
                         if est_individu_vivant(e_obj, annee_actuelle):
                             enfants_html += "<li>👶 Confidentiel</li>"
                         else:
@@ -272,7 +283,7 @@ def generer_page_individu(individu, gedcom_parser, output_dir, config):
     if config["contact"]:
         html_contact_block = '<p>📧 <a href="../contact.php">Contacter l\'auteur</a></p>'
 
-    php_header = obtenir_php_tracking_header(config.get("mon_ip", ""))
+    php_header = obtenir_php_tracking_header(config.get("mon_ip", ""), config.get("url_domaine", ""))
     html_content = php_header + f"""<!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -346,6 +357,10 @@ def generer_page_individu(individu, gedcom_parser, output_dir, config):
         f.write(html_content)
 
 def generer_page_mentions(output_dir, config):
+    hebergeur_texte = "Ce site est hébergé gracieusement sur les Pages Personnelles de Free.<br>SAS Free - 8 rue de la Ville l'Évêque, 75008 Paris, France."
+    if config.get("type_hebergeur") == "Non Free":
+        hebergeur_texte = "Ce site est hébergé sur des serveurs privés autonomes sous la responsabilité de l'éditeur du site."
+
     html_body = f"""<!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -371,7 +386,7 @@ def generer_page_mentions(output_dir, config):
         <h1>Mentions Légales & Confidentialité</h1>
         
         <div class="alert">
-            <strong>✏️ Note à l'attention de l'administrateur :</strong> Pensez à compléter cette page avec vos informations personnelles (nom, hébergeur Free Pages Perso, etc.) en modifiant directement le fichier <code>mentions.php</code>.
+            <strong>✏️ Note à l'attention de l'administrateur :</strong> Pensez à compléter cette page avec vos informations personnelles en modifiant directement le fichier <code>mentions.php</code>.
         </div>
 
         <h2>1. Éditeur du site</h2>
@@ -380,8 +395,7 @@ def generer_page_mentions(output_dir, config):
         <strong>Contact :</strong> {config['contact']}</p>
 
         <h2>2. Hébergement</h2>
-        <p>Ce site est hébergé gracieusement sur les Pages Personnelles de Free.<br>
-        SAS Free - 8 rue de la Ville l'Évêque, 75008 Paris, France.</p>
+        <p>{hebergeur_texte}</p>
 
         <h2>3. Vie privée & RGPD</h2>
         <p>Conformément aux directives du RGPD et de la CNIL :</p>
@@ -398,7 +412,7 @@ def generer_page_mentions(output_dir, config):
 </body>
 </html>
 """
-    php_header = obtenir_php_tracking_header(config.get("mon_ip", ""))
+    php_header = obtenir_php_tracking_header(config.get("mon_ip", ""), config.get("url_domaine", ""))
     html_complet = php_header + "\n" + html_body
     with open(os.path.join(output_dir, "mentions.php"), "w", encoding="utf-8") as f:
         f.write(html_complet)
@@ -416,14 +430,14 @@ def generer_page_merci(output_dir, config):
     <div class="container" style="max-width: 600px; margin: 60px auto; padding: 40px 20px;">
         <h1 style="color: {config['c_titres']};">✉️ Message envoyé !</h1>
         <p style="color: #555; line-height: 1.6; margin: 20px 0; font-size: 1.1em;">
-            Votre message a bien été transmis. L'auteur de l'arbre généalogique vous répondra dans les plus brefs délais.
+            Votre message a bien été transmitted. L'auteur de l'arbre généalogique vous répondra dans les plus brefs délais.
         </p>
         <p style="margin-top: 30px;"><a href="index.php" class="btn-action btn-dl" style="background-color: {config['c_titres']}; color: white; padding: 10px 20px;">← Retourner à l'accueil</a></p>
     </div>
 </body>
 </html>
 """
-    php_header = obtenir_php_tracking_header(config.get("mon_ip", ""))
+    php_header = obtenir_php_tracking_header(config.get("mon_ip", ""), config.get("url_domaine", ""))
     html_complet = php_header + "\n" + html_body
     with open(os.path.join(output_dir, "merci.php"), "w", encoding="utf-8") as f:
         f.write(html_complet)
@@ -490,7 +504,7 @@ def generer_page_contact(output_dir, config):
 </body>
 </html>
 """
-    php_header = obtenir_php_tracking_header(config.get("mon_ip", ""))
+    php_header = obtenir_php_tracking_header(config.get("mon_ip", ""), config.get("url_domaine", ""))
     html_complet = php_header + "\n" + html_body
     with open(os.path.join(output_dir, "contact.php"), "w", encoding="utf-8") as f:
         f.write(html_complet)
@@ -499,9 +513,6 @@ def execution_generation(config):
     chemin_ged = config["ged_path"]
     output_dir = "./site_web"
     
-    # Nettoyage de sécurité : on supprime d'abord l'ancien dossier individus s'il existe 
-    # pour effacer les anciennes fiches résiduelles des personnes vivantes.
-    import shutil
     if os.path.exists(os.path.join(output_dir, "individus")):
         shutil.rmtree(os.path.join(output_dir, "individus"))
         
@@ -525,7 +536,7 @@ def execution_generation(config):
             --accent-color: {config['c_liens']}; 
             --text-color: #333; 
         }}
-        * {{ box-spacing: border-box; }}
+        * {{ box-sizing: border-box; }}
         body {{ font-family: {police_alternative} !important; background: var(--bg-color); color: var(--text-color); margin: 0; padding: 20px; }}
         .container {{ max-width: 950px; margin: 20px auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); text-align: center; }}
         h1, h2, h3, h4 {{ color: var(--primary-color); font-family: {police_alternative} !important; }}
@@ -620,12 +631,10 @@ def execution_generation(config):
     total_individus = 0
     annee_actuelle = datetime.now().year
     
-    # Génération exclusive des pages et indexations pour les personnes décédées
     for element in child_elements:
         if isinstance(element, IndividualElement):
             est_vivant = est_individu_vivant(element, annee_actuelle)
             
-            # Si vivant, on ignore complètement (ni écriture de fichier ni indexation)
             if est_vivant:
                 continue
                 
@@ -666,7 +675,7 @@ def execution_generation(config):
     </div>
     """
 
-    php_header = obtenir_php_tracking_header(config.get("mon_ip", ""))
+    php_header = obtenir_php_tracking_header(config.get("mon_ip", ""), config.get("url_domaine", ""))
 
     for lettre, individus in dictionnaire_lettres.items():
         individus.sort(key=lambda x: x["tri"])
@@ -958,7 +967,10 @@ foreach ($visites_inverses as $v) {{
     generer_page_contact(output_dir, config)
     generer_page_merci(output_dir, config)
     
-    code_htaccess = """# 1. Activation de PHP 5.6 sur les serveurs Pages Perso de Free.fr
+    # Adaptations spécifiques du .htaccess si hébergeur Free
+    code_htaccess = ""
+    if config.get("type_hebergeur") == "Free":
+        code_htaccess = """# 1. Activation de PHP 5.6 sur les serveurs Pages Perso de Free.fr
 <IfDefine Free>
 php56 1 
 </IfDefine>
@@ -969,6 +981,14 @@ Options -Indexes
 # 3. Redirection 404 personnalisée vers notre fichier PHP d'erreur
 ErrorDocument 404 /404.php
 """
+    else:
+        code_htaccess = """# Empêche la navigation par index
+Options -Indexes
+
+# Redirection 404 personnalisée
+ErrorDocument 404 /404.php
+"""
+
     with open(os.path.join(output_dir, ".htaccess"), "w", encoding="utf-8", newline="\n") as f:
         f.write(code_htaccess)
 
@@ -1016,8 +1036,8 @@ ErrorDocument 404 /404.php
 class ApplicationConfiguration:
     def __init__(self, root):
         self.root = root
-        self.root.title("GénéaSit - Configuration PHP (Free)")
-        self.root.geometry("690x940")
+        self.root.title("GénéaSite - Configuration Web (Free & Multi-Hébergeurs)")
+        self.root.geometry("720x980")
         self.root.configure(padx=15, pady=15)
 
         self.color_fond = "#f4f6f9"
@@ -1025,7 +1045,7 @@ class ApplicationConfiguration:
         self.color_liens = "#27ae60"
 
         frame_aide_generale = tk.Frame(root, bg="#ebf5fb", bd=1, relief="solid", padx=10, pady=8)
-        frame_aide_generale.pack(fill="x", pady=(0, 15))
+        frame_aide_generale.pack(fill="x", pady=(0, 10))
         
         lbl_aide_titre = tk.Label(frame_aide_generale, text="💡 GUIDE DE MISE EN FORME (Pour le Titre et l'Introduction) :", 
                                   font=("Arial", 11, "bold"), fg="#1b4f72", bg="#ebf5fb")
@@ -1042,9 +1062,29 @@ class ApplicationConfiguration:
                                   font=("Arial", 10, "bold"), fg="#212f3d", bg="#ebf5fb", justify="left")
         lbl_aide_corps.pack(anchor="w")
 
+        # ---------------- SÉLECTION HÉBERGEUR & DOMAINE ----------------
+        frame_hebergeur = tk.LabelFrame(root, text=" 🌐 Hébergement & Configuration Domaine ", font=("Arial", 10, "bold"), fg="#2c3e50", padx=10, pady=8)
+        frame_hebergeur.pack(fill="x", pady=(0, 10))
+
+        tk.Label(frame_hebergeur, text="Votre hébergeur web :", font=("Arial", 9, "bold")).grid(row=0, column=0, sticky="w", pady=2)
+        self.var_hebergeur = tk.StringVar(value="Free")
+        self.menu_hebergeur = tk.OptionMenu(frame_hebergeur, self.var_hebergeur, "Free", "Non Free (Autre hébergeur)", command=self.adapter_champ_domaine)
+        self.menu_hebergeur.grid(row=0, column=1, sticky="w", padx=10, pady=2)
+
+        self.lbl_domaine = tk.Label(frame_hebergeur, text="Identifiant Free (ex: nom1.nom2) :", font=("Arial", 9, "bold"))
+        self.lbl_domaine.grid(row=1, column=0, sticky="w", pady=2)
+        
+        self.entry_domaine = tk.Entry(frame_hebergeur, width=40)
+        self.entry_domaine.insert(0, "ma-genealogie")
+        self.entry_domaine.grid(row=1, column=1, sticky="w", padx=10, pady=2)
+
+        self.lbl_aide_free = tk.Label(frame_hebergeur, text="💡 Chez Free, un login 'nom1.nom2' devient 'nom1-nom2.pages-perso.free.fr' en HTTPS.", font=("Arial", 8, "italic"), fg="#7f8c8d")
+        self.lbl_aide_free.grid(row=2, column=0, columnspan=2, sticky="w", pady=(2, 0))
+
+        # ---------------- DONNÉES DU SITE ----------------
         tk.Label(root, text="Fichier GEDCOM (.ged) :", font=("Arial", 10, "bold")).pack(anchor="w", pady=(0,2))
         frame_file = tk.Frame(root)
-        frame_file.pack(fill="x", pady=(0, 12))
+        frame_file.pack(fill="x", pady=(0, 10))
         self.entry_ged = tk.Entry(frame_file, width=50)
         self.entry_ged.pack(side="left", fill="x", expand=True, padx=(0,5))
         tk.Button(frame_file, text="Parcourir...", command=self.parcourir_ged).pack(side="right")
@@ -1052,37 +1092,37 @@ class ApplicationConfiguration:
         tk.Label(root, text="Titre principal du site (Accepte les balises HTML) :", font=("Arial", 10, "bold")).pack(anchor="w")
         self.entry_titre = tk.Entry(root, width=70)
         self.entry_titre.insert(0, "Ma généalogie")
-        self.entry_titre.pack(fill="x", pady=(0, 12))
+        self.entry_titre.pack(fill="x", pady=(0, 10))
 
         tk.Label(root, text="Nom de l'auteur / Famille :", font=("Arial", 10, "bold")).pack(anchor="w")
         self.entry_auteur = tk.Entry(root, width=70)
         self.entry_auteur.insert(0, "Auteur")
-        self.entry_auteur.pack(fill="x", pady=(0, 12))
+        self.entry_auteur.pack(fill="x", pady=(0, 10))
 
         tk.Label(root, text="Adresse Email de contact (Optionnel) :", font=("Arial", 10, "bold")).pack(anchor="w")
         self.entry_contact = tk.Entry(root, width=70)
         self.entry_contact.insert(0, "Mon adresse mail")
-        self.entry_contact.pack(fill="x", pady=(0, 12))
+        self.entry_contact.pack(fill="x", pady=(0, 10))
 
         tk.Label(root, text="Mot de passe d'accès aux Statistiques (stats.php) :", font=("Arial", 10, "bold")).pack(anchor="w")
         self.entry_stats_pass = tk.Entry(root, width=70, show="*")
         self.entry_stats_pass.insert(0, "admin123")
-        self.entry_stats_pass.pack(fill="x", pady=(0, 12))
+        self.entry_stats_pass.pack(fill="x", pady=(0, 10))
 
         tk.Label(root, text="Votre adresse IP à exclure du tracking (Optionnel) :", font=("Arial", 10, "bold")).pack(anchor="w")
         self.entry_ip = tk.Entry(root, width=70)
         self.entry_ip.insert(0, "mon IP")
-        self.entry_ip.pack(fill="x", pady=(0, 12))
+        self.entry_ip.pack(fill="x", pady=(0, 10))
 
         tk.Label(root, text="Police de caractères générale du site :", font=("Arial", 10, "bold")).pack(anchor="w")
         self.var_police = tk.StringVar(value="Segoe UI")
         polices = ["Segoe UI", "Arial", "Arial Narrow", "Calibri", "Cambria", "Comic Sans MS", "Garamond", "Georgia", "Times New Roman", "Verdana"]
         self.menu_police = tk.OptionMenu(root, self.var_police, *polices)
-        self.menu_police.pack(anchor="w", pady=(0, 12))
+        self.menu_police.pack(anchor="w", pady=(0, 10))
 
         tk.Label(root, text="Design & Couleurs :", font=("Arial", 10, "bold")).pack(anchor="w")
         frame_colors = tk.Frame(root)
-        frame_colors.pack(fill="x", pady=(0, 12))
+        frame_colors.pack(fill="x", pady=(0, 10))
         self.btn_fond = tk.Button(frame_colors, text="Couleur Fond", bg=self.color_fond, command=lambda: self.choisir_couleur('fond'))
         self.btn_fond.pack(side="left", padx=5)
         self.btn_titres = tk.Button(frame_colors, text="Couleur Titres", fg="white", bg=self.color_titres, command=lambda: self.choisir_couleur('titres'))
@@ -1091,16 +1131,24 @@ class ApplicationConfiguration:
         self.btn_liens.pack(side="left", padx=5)
 
         tk.Label(root, text="Texte d'introduction sur la page d'accueil (Accepte les balises HTML) :", font=("Arial", 10, "bold")).pack(anchor="w")
-        self.txt_intro = scrolledtext.ScrolledText(root, width=70, height=6, wrap=tk.WORD)
+        self.txt_intro = scrolledtext.ScrolledText(root, width=70, height=5, wrap=tk.WORD)
         texte_par_defaut = (
             "Ce site a été mis en ligne pour vous présenter mes recherches généalogiques,\n\n"
             "avec toutes les personnes qui peuvent constituer notre famille.\n\n"
             "N'hésitez pas à naviguer à travers ces pages ou à utiliser la <b style='color:#27ae60;'>barre de recherche</b>. Bonne découverte."
         )
         self.txt_intro.insert(tk.END, texte_par_defaut)
-        self.txt_intro.pack(fill="both", expand=True, pady=(0, 15))
+        self.txt_intro.pack(fill="both", expand=True, pady=(0, 10))
 
         tk.Button(root, text="🚀 Générer le site Internet (PHP)", font=("Arial", 12, "bold"), bg="#27ae60", fg="white", height=2, command=self.lancer_generation).pack(fill="x")
+
+    def adapter_champ_domaine(self, choix):
+        if choix == "Free":
+            self.lbl_domaine.config(text="Identifiant Free (ex: nom1.nom2) :")
+            self.lbl_aide_free.config(text="💡 Chez Free, un login 'nom1.nom2' devient 'nom1-nom2.pages-perso.free.fr' en HTTPS.")
+        else:
+            self.lbl_domaine.config(text="Nom de domaine complet :")
+            self.lbl_aide_free.config(text="💡 Exemple : www.mon-site-genealogie.fr (Saisir sans http/https).")
 
     def parcourir_ged(self):
         filename = filedialog.askopenfilename(filetypes=[("Fichiers GEDCOM", "*.ged"), ("Tous les fichiers", "*.*")])
@@ -1120,6 +1168,21 @@ class ApplicationConfiguration:
             elif type_couleur == 'liens':
                 self.color_liens = color
                 self.btn_liens.config(bg=color)
+
+    def calculer_url_domaine(self):
+        type_h = self.var_hebergeur.get()
+        saisie = self.entry_domaine.get().strip()
+        
+        if not saisie:
+            return ""
+
+        if type_h == "Free":
+            # Nettoyage et conversion automatique du login Free
+            saisie_propre = saisie.lower().replace("http://", "").replace("https://", "").replace(".pages-perso.free.fr", "").strip()
+            login_nettoye = saisie_propre.replace(".", "-")
+            return f"{login_nettoye}.pages-perso.free.fr"
+        else:
+            return saisie.replace("http://", "").replace("https://", "").rstrip("/")
 
     def lancer_generation(self):
         if not self.entry_ged.get().strip():
@@ -1141,7 +1204,9 @@ class ApplicationConfiguration:
             "c_fond": self.color_fond,
             "c_titres": self.color_titres,
             "c_liens": self.color_liens,
-            "introduction": self.txt_intro.get("1.0", tk.END).strip()
+            "introduction": self.txt_intro.get("1.0", tk.END).strip(),
+            "type_hebergeur": self.var_hebergeur.get(),
+            "url_domaine": self.calculer_url_domaine()
         }
         try:
             execution_generation(config)
