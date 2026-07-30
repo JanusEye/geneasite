@@ -57,10 +57,9 @@ def est_individu_vivant(ind_element, annee_actuelle):
     else:
         return True
 
-def obtenir_php_tracking_header(ip_exclue, url_domaine=""):
+def generer_Fichier_stats_inc(output_dir, ip_exclue, url_domaine=""):
     ip_filtrage = ip_exclue.strip() if ip_exclue.strip() else "0.0.0.0"
     
-    # Construction de la ligne de redirection HTTPS si un domaine est renseigné
     code_redirection_https = ""
     if url_domaine.strip():
         domaine_clean = url_domaine.strip().replace("https://", "").replace("http://", "").rstrip("/")
@@ -72,8 +71,9 @@ if (empty($_SERVER['HTTPS']) || $_SERVER['HTTPS'] === 'off') {{
     exit();
 }}"""
 
-    return f"""<?php
-// Script de compteur et tracking de visites (Compatible Multi-hébergeurs & RGPD)
+    contenu_stats_inc = f"""<?php
+// Script de compteur, tracking de visites et redirection HTTPS (Limite: 10000 visiteurs)
+$ip_filtrage = '{ip_filtrage}';
 $fichier_stats = rtrim($_SERVER['DOCUMENT_ROOT'], '/') . '/stats.json';
 
 function obtenir_os($user_agent) {{
@@ -107,7 +107,7 @@ function est_robot($user_agent) {{
 
 $ip_brute = $_SERVER['REMOTE_ADDR'];
 
-if ($ip_brute !== '{ip_filtrage}') {{
+if ($ip_brute !== $ip_filtrage) {{
     if (strpos($ip_brute, '.') !== false) {{
         $ip = preg_replace('/\\.\\d+$/', '.0', $ip_brute);
     }} else {{
@@ -142,14 +142,23 @@ if ($ip_brute !== '{ip_filtrage}') {{
 
     $historique[] = $nouvelle_visite;
 
-    if (count($historique) > 5000) {{
-        $historique = array_slice($historique, -5000);
+    // Limite fixée à 10 000 visiteurs
+    if (count($historique) > 10000) {{
+        $historique = array_slice($historique, -10000);
     }}
 
     file_put_contents($fichier_stats, json_encode($historique));
 }}{code_redirection_https}
 ?>
 """
+    with open(os.path.join(output_dir, "stats_inc.php"), "w", encoding="utf-8") as f:
+        f.write(contenu_stats_inc)
+
+def obtenir_php_tracking_header(niveau_relatif=""):
+    return f"""<?php
+// Inclusion du système de tracking et des règles de sécurité/redirection
+require_once __DIR__ . '/{niveau_relatif}stats_inc.php';
+?>"""
 
 def generer_page_individu(individu, gedcom_parser, output_dir, config):
     annee_actuelle = datetime.now().year
@@ -283,7 +292,7 @@ def generer_page_individu(individu, gedcom_parser, output_dir, config):
     if config["contact"]:
         html_contact_block = '<p>📧 <a href="../contact.php">Contacter l\'auteur</a></p>'
 
-    php_header = obtenir_php_tracking_header(config.get("mon_ip", ""), config.get("url_domaine", ""))
+    php_header = obtenir_php_tracking_header("../")
     html_content = php_header + f"""<!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -412,7 +421,7 @@ def generer_page_mentions(output_dir, config):
 </body>
 </html>
 """
-    php_header = obtenir_php_tracking_header(config.get("mon_ip", ""), config.get("url_domaine", ""))
+    php_header = obtenir_php_tracking_header("")
     html_complet = php_header + "\n" + html_body
     with open(os.path.join(output_dir, "mentions.php"), "w", encoding="utf-8") as f:
         f.write(html_complet)
@@ -437,7 +446,7 @@ def generer_page_merci(output_dir, config):
 </body>
 </html>
 """
-    php_header = obtenir_php_tracking_header(config.get("mon_ip", ""), config.get("url_domaine", ""))
+    php_header = obtenir_php_tracking_header("")
     html_complet = php_header + "\n" + html_body
     with open(os.path.join(output_dir, "merci.php"), "w", encoding="utf-8") as f:
         f.write(html_complet)
@@ -504,7 +513,7 @@ def generer_page_contact(output_dir, config):
 </body>
 </html>
 """
-    php_header = obtenir_php_tracking_header(config.get("mon_ip", ""), config.get("url_domaine", ""))
+    php_header = obtenir_php_tracking_header("")
     html_complet = php_header + "\n" + html_body
     with open(os.path.join(output_dir, "contact.php"), "w", encoding="utf-8") as f:
         f.write(html_complet)
@@ -518,6 +527,9 @@ def execution_generation(config):
         
     os.makedirs(os.path.join(output_dir, "individus"), exist_ok=True)
     os.makedirs(os.path.join(output_dir, "assets"), exist_ok=True)
+    
+    # Création du fichier stats_inc.php centralisé avec la limite à 10 000 visiteurs
+    generer_Fichier_stats_inc(output_dir, config.get("mon_ip", ""), config.get("url_domaine", ""))
     
     font_declaration = ""
     police_choisie = config['police']
@@ -675,7 +687,7 @@ def execution_generation(config):
     </div>
     """
 
-    php_header = obtenir_php_tracking_header(config.get("mon_ip", ""), config.get("url_domaine", ""))
+    php_header = obtenir_php_tracking_header("")
 
     for lettre, individus in dictionnaire_lettres.items():
         individus.sort(key=lambda x: x["tri"])
@@ -967,7 +979,6 @@ foreach ($visites_inverses as $v) {{
     generer_page_contact(output_dir, config)
     generer_page_merci(output_dir, config)
     
-    # Adaptations spécifiques du .htaccess si hébergeur Free
     code_htaccess = ""
     if config.get("type_hebergeur") == "Free":
         code_htaccess = """# 1. Activation de PHP 5.6 sur les serveurs Pages Perso de Free.fr
@@ -1177,7 +1188,6 @@ class ApplicationConfiguration:
             return ""
 
         if type_h == "Free":
-            # Nettoyage et conversion automatique du login Free
             saisie_propre = saisie.lower().replace("http://", "").replace("https://", "").replace(".pages-perso.free.fr", "").strip()
             login_nettoye = saisie_propre.replace(".", "-")
             return f"{login_nettoye}.pages-perso.free.fr"
