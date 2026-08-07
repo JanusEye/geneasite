@@ -72,9 +72,8 @@ if (empty($_SERVER['HTTPS']) || $_SERVER['HTTPS'] === 'off') {{
 }}"""
 
     contenu_stats_inc = f"""<?php
-// Script de compteur, tracking de visites et redirection HTTPS (Limite: 10000 visiteurs)
+// Script de compteur, tracking de visites et redirection HTTPS
 $ip_filtrage = '{ip_filtrage}';
-$fichier_stats = rtrim($_SERVER['DOCUMENT_ROOT'], '/') . '/stats.json';
 
 function obtenir_os($user_agent) {{
     $os_platform = "Inconnu";
@@ -133,21 +132,35 @@ if ($ip_brute !== $ip_filtrage) {{
         "os" => $os
     );
 
-    $historique = [];
-    if (file_exists($fichier_stats)) {{
-        $contenu = file_get_contents($fichier_stats);
-        $historique = json_decode($contenu, true);
-        if (!is_array($historique)) {{ $historique = []; }}
+    $dir_racine = dirname(__FILE__);
+    $fichier_stats = $dir_racine . '/stats_' . $mois . '.json';
+    
+    $fp = @fopen($fichier_stats, 'c+');
+    if ($fp) {{
+        if (flock($fp, LOCK_EX)) {{
+            $taille = filesize($fichier_stats);
+            $historique = [];
+            
+            if ($taille > 0) {{
+                $contenu = fread($fp, $taille);
+                $historique = json_decode($contenu, true);
+                if (!is_array($historique)) {{ $historique = []; }}
+            }}
+
+            $historique[] = $nouvelle_visite;
+
+            if (count($historique) > 10000) {{
+                $historique = array_slice($historique, -10000);
+            }}
+
+            ftruncate($fp, 0);
+            rewind($fp);
+            fwrite($fp, json_encode($historique));
+            fflush($fp);
+            flock($fp, LOCK_UN);
+        }}
+        fclose($fp);
     }}
-
-    $historique[] = $nouvelle_visite;
-
-    // Limite fixée à 10 000 visiteurs
-    if (count($historique) > 10000) {{
-        $historique = array_slice($historique, -10000);
-    }}
-
-    file_put_contents($fichier_stats, json_encode($historique));
 }}{code_redirection_https}
 ?>
 """
@@ -156,7 +169,6 @@ if ($ip_brute !== $ip_filtrage) {{
 
 def obtenir_php_tracking_header(niveau_relatif=""):
     return f"""<?php
-// Inclusion du système de tracking et des règles de sécurité/redirection
 require_once __DIR__ . '/{niveau_relatif}stats_inc.php';
 ?>"""
 
@@ -439,7 +451,7 @@ def generer_page_merci(output_dir, config):
     <div class="container" style="max-width: 600px; margin: 60px auto; padding: 40px 20px;">
         <h1 style="color: {config['c_titres']};">✉️ Message envoyé !</h1>
         <p style="color: #555; line-height: 1.6; margin: 20px 0; font-size: 1.1em;">
-            Votre message a bien été transmitted. L'auteur de l'arbre généalogique vous répondra dans les plus brefs délais.
+            Votre message a bien été transmis. L'auteur de l'arbre généalogique vous répondra dans les plus brefs délais.
         </p>
         <p style="margin-top: 30px;"><a href="index.php" class="btn-action btn-dl" style="background-color: {config['c_titres']}; color: white; padding: 10px 20px;">← Retourner à l'accueil</a></p>
     </div>
@@ -528,7 +540,6 @@ def execution_generation(config):
     os.makedirs(os.path.join(output_dir, "individus"), exist_ok=True)
     os.makedirs(os.path.join(output_dir, "assets"), exist_ok=True)
     
-    # Création du fichier stats_inc.php centralisé avec la limite à 10 000 visiteurs
     generer_Fichier_stats_inc(output_dir, config.get("mon_ip", ""), config.get("url_domaine", ""))
     
     font_declaration = ""
@@ -779,30 +790,42 @@ if (!isset($_SESSION['stats_logged_in']) || $_SESSION['stats_logged_in'] !== tru
     exit;
 }}
 
-$fichier_stats = rtrim($_SERVER['DOCUMENT_ROOT'], '/') . '/stats.json';
+$dir_racine = dirname(__FILE__);
+$fichiers_stats = glob($dir_racine . '/stats_*.json');
 
-if (isset($_GET['action']) && $_GET['action'] == 'download') {{
-    if (file_exists($fichier_stats)) {{
-        header('Content-Type: application/json');
-        header('Content-Disposition: attachment; filename="stats.json"');
-        readfile($fichier_stats);
-        exit;
+$fichier_ancien = $dir_racine . '/stats.json';
+if (file_exists($fichier_ancien)) {{
+    $fichiers_stats[] = $fichier_ancien;
+}}
+
+$visites = [];
+
+foreach ($fichiers_stats as $fichier_mensuel) {{
+    if (file_exists($fichier_mensuel)) {{
+        $contenu_brut = file_get_contents($fichier_mensuel);
+        $donnees_mois = json_decode($contenu_brut, true);
+        if (is_array($donnees_mois)) {{
+            $visites = array_merge($visites, $donnees_mois);
+        }}
     }}
 }}
 
-if (isset($_POST['action']) && $_POST['action'] == 'clear') {{
-    file_put_contents($fichier_stats, json_encode([]));
-    header('Location: stats.php?msg=deleted');
+if (isset($_GET['action']) && $_GET['action'] == 'download') {{
+    header('Content-Type: application/json');
+    header('Content-Disposition: attachment; filename="stats_export.json"');
+    echo json_encode($visites);
     exit;
 }}
 
-if (file_exists($fichier_stats)) {{
-    $donnees_brutes = file_get_contents($fichier_stats);
-    $visites = json_decode($donnees_brutes, true);
-}} else {{
-    $visites = [];
+if (isset($_POST['action']) && $_POST['action'] == 'clear') {{
+    foreach ($fichiers_stats as $fichier_mensuel) {{
+        if (file_exists($fichier_mensuel)) {{
+            @unlink($fichier_mensuel);
+        }}
+    }}
+    header('Location: stats.php?msg=deleted');
+    exit;
 }}
-if (!is_array($visites)) {{ $visites = []; }}
 
 $visites_inverses = array_reverse($visites);
 $dernieres_50_visites = array_slice($visites_inverses, 0, 50);
@@ -834,7 +857,7 @@ foreach ($visites_inverses as $v) {{
         
         <div style="margin-bottom: 20px;">
             <a href="index.php" style="margin-right:20px;">← Retourner à l'accueil</a>
-            <a href="stats.php?action=download" class="btn-action btn-dl">💾 Télécharger stats.json</a>
+            <a href="stats.php?action=download" class="btn-action btn-dl">💾 Télécharger les statistiques</a>
             <a href="stats.php?action=logout" class="btn-action btn-del" style="background-color: #7f8c8d;">🔒 Déconnexion</a>
             
             <form action="stats.php" method="post" style="display: inline;" onsubmit="return confirm('⚠️ Êtes-vous sûr de vouloir supprimer définitivement tout l\'historique des statistiques ?');">
@@ -845,7 +868,7 @@ foreach ($visites_inverses as $v) {{
 
         <?php if (isset($_GET['msg']) && $_GET['msg'] == 'deleted'): ?>
             <div style="background-color: #d4edda; color: #155724; padding: 10px; border-radius: 4px; margin-bottom: 20px;">
-                ✨ Le fichier de statistiques a été vidé avec succès.
+                ✨ Les fichiers de statistiques ont été supprimés avec succès.
             </div>
         <?php endif; ?>
         
@@ -1073,7 +1096,6 @@ class ApplicationConfiguration:
                                   font=("Arial", 10, "bold"), fg="#212f3d", bg="#ebf5fb", justify="left")
         lbl_aide_corps.pack(anchor="w")
 
-        # ---------------- SÉLECTION HÉBERGEUR & DOMAINE ----------------
         frame_hebergeur = tk.LabelFrame(root, text=" 🌐 Hébergement & Configuration Domaine ", font=("Arial", 10, "bold"), fg="#2c3e50", padx=10, pady=8)
         frame_hebergeur.pack(fill="x", pady=(0, 10))
 
@@ -1092,7 +1114,6 @@ class ApplicationConfiguration:
         self.lbl_aide_free = tk.Label(frame_hebergeur, text="💡 Chez Free, un login 'nom1.nom2' devient 'nom1-nom2.pages-perso.free.fr' en HTTPS.", font=("Arial", 8, "italic"), fg="#7f8c8d")
         self.lbl_aide_free.grid(row=2, column=0, columnspan=2, sticky="w", pady=(2, 0))
 
-        # ---------------- DONNÉES DU SITE ----------------
         tk.Label(root, text="Fichier GEDCOM (.ged) :", font=("Arial", 10, "bold")).pack(anchor="w", pady=(0,2))
         frame_file = tk.Frame(root)
         frame_file.pack(fill="x", pady=(0, 10))
