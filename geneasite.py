@@ -71,9 +71,24 @@ if (empty($_SERVER['HTTPS']) || $_SERVER['HTTPS'] === 'off') {{
     exit();
 }}"""
 
+def generer_Fichier_stats_inc(output_dir, ip_exclue, url_domaine=""):
+    ip_filtrage = ip_exclue.strip() if ip_exclue.strip() else "0.0.0.0"
+    
+    code_redirection_https = ""
+    if url_domaine.strip():
+        domaine_clean = url_domaine.strip().replace("https://", "").replace("http://", "").rstrip("/")
+        code_redirection_https = f"""
+if (empty($_SERVER['HTTPS']) || $_SERVER['HTTPS'] === 'off') {{
+    $url_securisee = 'https://{domaine_clean}' . $_SERVER['REQUEST_URI'];
+    header('HTTP/1.1 301 Moved Permanently');
+    header('Location: ' . $url_securisee);
+    exit();
+}}"""
+
     contenu_stats_inc = f"""<?php
 // Script de compteur, tracking de visites et redirection HTTPS
 $ip_filtrage = '{ip_filtrage}';
+$fichier_stats = rtrim($_SERVER['DOCUMENT_ROOT'], '/') . '/stats.json';
 
 function obtenir_os($user_agent) {{
     $os_platform = "Inconnu";
@@ -132,23 +147,22 @@ if ($ip_brute !== $ip_filtrage) {{
         "os" => $os
     );
 
-    $dir_racine = dirname(__FILE__);
-    $fichier_stats = $dir_racine . '/stats_' . $mois . '.json';
-    
+    $historique = [];
+
+    // FIX CONCURRENCE : Écriture sécurisée avec verrou exclusif (flock)
     $fp = @fopen($fichier_stats, 'c+');
     if ($fp) {{
         if (flock($fp, LOCK_EX)) {{
             $taille = filesize($fichier_stats);
-            $historique = [];
-            
             if ($taille > 0) {{
                 $contenu = fread($fp, $taille);
                 $historique = json_decode($contenu, true);
-                if (!is_array($historique)) {{ $historique = []; }}
             }}
+            if (!is_array($historique)) {{ $historique = []; }}
 
             $historique[] = $nouvelle_visite;
 
+            // Conservation glissante des 10 000 dernières visites
             if (count($historique) > 10000) {{
                 $historique = array_slice($historique, -10000);
             }}
@@ -169,7 +183,10 @@ if ($ip_brute !== $ip_filtrage) {{
 
 def obtenir_php_tracking_header(niveau_relatif=""):
     return f"""<?php
+// Inclusion du système de tracking et des règles de sécurité/redirection
 require_once __DIR__ . '/{niveau_relatif}stats_inc.php';
+$protocol_canonical = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http');
+$url_canonical_page = $protocol_canonical . '://' . $_SERVER['HTTP_HOST'] . strtok($_SERVER['REQUEST_URI'], '?');
 ?>"""
 
 def generer_page_individu(individu, gedcom_parser, output_dir, config):
@@ -311,6 +328,7 @@ def generer_page_individu(individu, gedcom_parser, output_dir, config):
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{prenom_affichage} {nom_affichage}</title>
+    <link rel="canonical" href="<?php echo $url_canonical_page; ?>">
     <link rel="stylesheet" href="../assets/style.css?v=4">
     <style>
         .section-fiche {{ text-align: left; margin-top: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 5px; background: #fff; }}
@@ -366,7 +384,7 @@ def generer_page_individu(individu, gedcom_parser, output_dir, config):
             </p>
         </footer>
         <p style="margin-top: 20px;"><a href="../index.php">← Retour à l'accueil principal</a></p>
-             
+            
     </main>
 
     <script src="../assets/donnees_recherche.js"></script>
@@ -388,6 +406,7 @@ def generer_page_mentions(output_dir, config):
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mentions légales & Confidentialité - {config['titre_principal']}</title>
+    <link rel="canonical" href="<?php echo $url_canonical_page; ?>">
     <style>
         body {{ font-family: '{config['police']}', Arial, sans-serif; background-color: {config['c_fond']}; color: #333; line-height: 1.6; padding: 20px; }}
         .container {{ max-width: 800px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
@@ -428,7 +447,7 @@ def generer_page_mentions(output_dir, config):
 
         <footer>
             <p>Généré via l'application <a href="http://geneasite.free.fr" target="_blank">GénéaSite</a></p>
-        </footer>
+        </footer>        
     </div>
 </body>
 </html>
@@ -445,6 +464,7 @@ def generer_page_merci(output_dir, config):
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Merci - {config['titre_principal']}</title>
+    <link rel="canonical" href="<?php echo $url_canonical_page; ?>">
     <link rel="stylesheet" href="assets/style.css?v=4">
 </head>
 <body>
@@ -464,12 +484,15 @@ def generer_page_merci(output_dir, config):
         f.write(html_complet)
 
 def generer_page_contact(output_dir, config):
+    php_header = obtenir_php_tracking_header("")
+    
     html_body = f"""<!DOCTYPE html>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Contact - {config['titre_principal']}</title>
+    <link rel="canonical" href="<?php echo $url_canonical_page; ?>">
     <link rel="stylesheet" href="assets/style.css?v=4">
     <style>
         .form-group {{ margin-bottom: 15px; text-align: left; }}
@@ -489,10 +512,10 @@ def generer_page_contact(output_dir, config):
         <p style="color: #666; margin-bottom: 25px;">Utilisez le formulaire ci-dessous pour envoyer un message concernant les recherches de cet arbre.</p>
 
         <?php
-        $protocol = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http');
+        $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
         $host = $_SERVER['HTTP_HOST'];
-        $directory = rtrim(dirname($_SERVER['SCRIPT_NAME']), '/\\\\');
-        $next_url = $protocol . '://' . $host . $directory . '/merci.php';
+        $uri = rtrim(dirname($_SERVER['PHP_SELF']), '/\\\\');
+        $next_url = $protocol . '://' . $host . ($uri ? $uri : '') . '/merci.php';
         ?>
 
         <form action="https://formsubmit.co/{config['contact']}" method="POST">
@@ -525,7 +548,6 @@ def generer_page_contact(output_dir, config):
 </body>
 </html>
 """
-    php_header = obtenir_php_tracking_header("")
     html_complet = php_header + "\n" + html_body
     with open(os.path.join(output_dir, "contact.php"), "w", encoding="utf-8") as f:
         f.write(html_complet)
@@ -540,6 +562,7 @@ def execution_generation(config):
     os.makedirs(os.path.join(output_dir, "individus"), exist_ok=True)
     os.makedirs(os.path.join(output_dir, "assets"), exist_ok=True)
     
+    # Création du fichier stats_inc.php centralisé avec la limite à 10 000 visiteurs
     generer_Fichier_stats_inc(output_dir, config.get("mon_ip", ""), config.get("url_domaine", ""))
     
     font_declaration = ""
@@ -710,6 +733,7 @@ def execution_generation(config):
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Index - Lettre {lettre}</title>
+    <link rel="canonical" href="<?php echo $url_canonical_page; ?>">
     <link rel="stylesheet" href="assets/style.css?v=4">
 </head>
 <body>
@@ -732,6 +756,7 @@ def execution_generation(config):
             </p>
         </footer>
         <p style="margin-top:30px;"><a href="index.php">← Retour à l'accueil</a></p>
+        
    </main>
     <script src="assets/donnees_recherche.js"></script>
     <script src="assets/search.js"></script>
@@ -766,6 +791,7 @@ if (!isset($_SESSION['stats_logged_in']) || $_SESSION['stats_logged_in'] !== tru
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Zone Protégée</title>
+    <link rel="canonical" href="<?php echo $url_canonical_page; ?>">
     <link rel="stylesheet" href="assets/style.css?v=4">
 </head>
 <body>
@@ -790,42 +816,30 @@ if (!isset($_SESSION['stats_logged_in']) || $_SESSION['stats_logged_in'] !== tru
     exit;
 }}
 
-$dir_racine = dirname(__FILE__);
-$fichiers_stats = glob($dir_racine . '/stats_*.json');
-
-$fichier_ancien = $dir_racine . '/stats.json';
-if (file_exists($fichier_ancien)) {{
-    $fichiers_stats[] = $fichier_ancien;
-}}
-
-$visites = [];
-
-foreach ($fichiers_stats as $fichier_mensuel) {{
-    if (file_exists($fichier_mensuel)) {{
-        $contenu_brut = file_get_contents($fichier_mensuel);
-        $donnees_mois = json_decode($contenu_brut, true);
-        if (is_array($donnees_mois)) {{
-            $visites = array_merge($visites, $donnees_mois);
-        }}
-    }}
-}}
+$fichier_stats = rtrim($_SERVER['DOCUMENT_ROOT'], '/') . '/stats.json';
 
 if (isset($_GET['action']) && $_GET['action'] == 'download') {{
-    header('Content-Type: application/json');
-    header('Content-Disposition: attachment; filename="stats_export.json"');
-    echo json_encode($visites);
-    exit;
+    if (file_exists($fichier_stats)) {{
+        header('Content-Type: application/json');
+        header('Content-Disposition: attachment; filename="stats.json"');
+        readfile($fichier_stats);
+        exit;
+    }}
 }}
 
 if (isset($_POST['action']) && $_POST['action'] == 'clear') {{
-    foreach ($fichiers_stats as $fichier_mensuel) {{
-        if (file_exists($fichier_mensuel)) {{
-            @unlink($fichier_mensuel);
-        }}
-    }}
+    file_put_contents($fichier_stats, json_encode([]));
     header('Location: stats.php?msg=deleted');
     exit;
 }}
+
+if (file_exists($fichier_stats)) {{
+    $donnees_brutes = file_get_contents($fichier_stats);
+    $visites = json_decode($donnees_brutes, true);
+}} else {{
+    $visites = [];
+}}
+if (!is_array($visites)) {{ $visites = []; }}
 
 $visites_inverses = array_reverse($visites);
 $dernieres_50_visites = array_slice($visites_inverses, 0, 50);
@@ -849,6 +863,7 @@ foreach ($visites_inverses as $v) {{
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Administration - Statistiques privées</title>
+    <link rel="canonical" href="<?php echo $url_canonical_page; ?>">
     <link rel="stylesheet" href="assets/style.css?v=4">
 </head>
 <body>
@@ -857,7 +872,7 @@ foreach ($visites_inverses as $v) {{
         
         <div style="margin-bottom: 20px;">
             <a href="index.php" style="margin-right:20px;">← Retourner à l'accueil</a>
-            <a href="stats.php?action=download" class="btn-action btn-dl">💾 Télécharger les statistiques</a>
+            <a href="stats.php?action=download" class="btn-action btn-dl">💾 Télécharger stats.json</a>
             <a href="stats.php?action=logout" class="btn-action btn-del" style="background-color: #7f8c8d;">🔒 Déconnexion</a>
             
             <form action="stats.php" method="post" style="display: inline;" onsubmit="return confirm('⚠️ Êtes-vous sûr de vouloir supprimer définitivement tout l\'historique des statistiques ?');">
@@ -868,7 +883,7 @@ foreach ($visites_inverses as $v) {{
 
         <?php if (isset($_GET['msg']) && $_GET['msg'] == 'deleted'): ?>
             <div style="background-color: #d4edda; color: #155724; padding: 10px; border-radius: 4px; margin-bottom: 20px;">
-                ✨ Les fichiers de statistiques ont été supprimés avec succès.
+                ✨ Le fichier de statistiques a été vidé avec succès.
             </div>
         <?php endif; ?>
         
@@ -955,6 +970,7 @@ foreach ($visites_inverses as $v) {{
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Accueil - Généalogie</title>
+    <link rel="canonical" href="<?php echo $url_canonical_page; ?>">
     <link rel="stylesheet" href="assets/style.css?v=4">
 </head>
 <body>
@@ -986,6 +1002,7 @@ foreach ($visites_inverses as $v) {{
                 Généré via l'application <a href="http://geneasite.free.fr" target="_blank">GénéaSite, du GEDCOM au site web</a><br>
                 <a href="mentions.php" style="color: #999; text-decoration: underline;">Mentions légales & Confidentialité</a>
             </p>
+           
         </footer>
         
     </main>
@@ -1037,6 +1054,7 @@ ErrorDocument 404 /404.php
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Page introuvable - 404</title>
+    <link rel="canonical" href="<?php echo $url_canonical_page; ?>">
     <link rel="stylesheet" href="<?php echo $root_path; ?>/assets/style.css?v=4">
 </head>
 <body>
@@ -1096,6 +1114,7 @@ class ApplicationConfiguration:
                                   font=("Arial", 10, "bold"), fg="#212f3d", bg="#ebf5fb", justify="left")
         lbl_aide_corps.pack(anchor="w")
 
+        # ---------------- SÉLECTION HÉBERGEUR & DOMAINE ----------------
         frame_hebergeur = tk.LabelFrame(root, text=" 🌐 Hébergement & Configuration Domaine ", font=("Arial", 10, "bold"), fg="#2c3e50", padx=10, pady=8)
         frame_hebergeur.pack(fill="x", pady=(0, 10))
 
@@ -1114,6 +1133,7 @@ class ApplicationConfiguration:
         self.lbl_aide_free = tk.Label(frame_hebergeur, text="💡 Chez Free, un login 'nom1.nom2' devient 'nom1-nom2.pages-perso.free.fr' en HTTPS.", font=("Arial", 8, "italic"), fg="#7f8c8d")
         self.lbl_aide_free.grid(row=2, column=0, columnspan=2, sticky="w", pady=(2, 0))
 
+        # ---------------- DONNÉES DU SITE ----------------
         tk.Label(root, text="Fichier GEDCOM (.ged) :", font=("Arial", 10, "bold")).pack(anchor="w", pady=(0,2))
         frame_file = tk.Frame(root)
         frame_file.pack(fill="x", pady=(0, 10))
