@@ -71,22 +71,10 @@ if (empty($_SERVER['HTTPS']) || $_SERVER['HTTPS'] === 'off') {{
     exit();
 }}"""
 
-def generer_Fichier_stats_inc(output_dir, ip_exclue, url_domaine=""):
-    ip_filtrage = ip_exclue.strip() if ip_exclue.strip() else "0.0.0.0"
-    
-    code_redirection_https = ""
-    if url_domaine.strip():
-        domaine_clean = url_domaine.strip().replace("https://", "").replace("http://", "").rstrip("/")
-        code_redirection_https = f"""
-if (empty($_SERVER['HTTPS']) || $_SERVER['HTTPS'] === 'off') {{
-    $url_securisee = 'https://{domaine_clean}' . $_SERVER['REQUEST_URI'];
-    header('HTTP/1.1 301 Moved Permanently');
-    header('Location: ' . $url_securisee);
-    exit();
-}}"""
-
     contenu_stats_inc = f"""<?php
 // Script de compteur, tracking de visites et redirection HTTPS
+{code_redirection_https}
+
 $ip_filtrage = '{ip_filtrage}';
 $fichier_stats = rtrim($_SERVER['DOCUMENT_ROOT'], '/') . '/stats.json';
 
@@ -149,33 +137,28 @@ if ($ip_brute !== $ip_filtrage) {{
 
     $historique = [];
 
-    // FIX CONCURRENCE : Écriture sécurisée avec verrou exclusif (flock)
-    $fp = @fopen($fichier_stats, 'c+');
-    if ($fp) {{
-        if (flock($fp, LOCK_EX)) {{
-            $taille = filesize($fichier_stats);
-            if ($taille > 0) {{
-                $contenu = fread($fp, $taille);
-                $historique = json_decode($contenu, true);
-            }}
-            if (!is_array($historique)) {{ $historique = []; }}
-
-            $historique[] = $nouvelle_visite;
-
-            // Conservation glissante des 10 000 dernières visites
-            if (count($historique) > 10000) {{
-                $historique = array_slice($historique, -10000);
-            }}
-
-            ftruncate($fp, 0);
-            rewind($fp);
-            fwrite($fp, json_encode($historique));
-            fflush($fp);
-            flock($fp, LOCK_UN);
+    // Lecture sécurisée du fichier
+    if (file_exists($fichier_stats)) {{
+        $contenu = @file_get_contents($fichier_stats);
+        if ($contenu) {{
+            $historique = json_decode($contenu, true);
         }}
-        fclose($fp);
     }}
-}}{code_redirection_https}
+    
+    if (!is_array($historique)) {{ 
+        $historique = []; 
+    }}
+
+    $historique[] = $nouvelle_visite;
+
+    // Conservation glissante des 10 000 dernières visites
+    if (count($historique) > 10000) {{
+        $historique = array_slice($historique, -10000);
+    }}
+
+    // Écriture atomique avec verrouillage natif
+    @file_put_contents($fichier_stats, json_encode($historique), LOCK_EX);
+}}
 ?>
 """
     with open(os.path.join(output_dir, "stats_inc.php"), "w", encoding="utf-8") as f:
@@ -447,7 +430,8 @@ def generer_page_mentions(output_dir, config):
 
         <footer>
             <p>Généré via l'application <a href="http://geneasite.free.fr" target="_blank">GénéaSite</a></p>
-        </footer>        
+        </footer>
+        
     </div>
 </body>
 </html>
@@ -551,7 +535,6 @@ def generer_page_contact(output_dir, config):
     html_complet = php_header + "\n" + html_body
     with open(os.path.join(output_dir, "contact.php"), "w", encoding="utf-8") as f:
         f.write(html_complet)
-
 def execution_generation(config):
     chemin_ged = config["ged_path"]
     output_dir = "./site_web"
@@ -1002,7 +985,7 @@ foreach ($visites_inverses as $v) {{
                 Généré via l'application <a href="http://geneasite.free.fr" target="_blank">GénéaSite, du GEDCOM au site web</a><br>
                 <a href="mentions.php" style="color: #999; text-decoration: underline;">Mentions légales & Confidentialité</a>
             </p>
-           
+            
         </footer>
         
     </main>
